@@ -9,7 +9,7 @@ export class TauriService {
     constructor() { }
 
     async addTask(task: string): Promise<string> {
-        return invoke('add_task', { task });
+        return invoke('add_task', { desc: task });
     }
 
     async getTasks(): Promise<string[]> {
