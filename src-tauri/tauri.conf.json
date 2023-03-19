@@ -27,8 +27,13 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "identifier": "com.tauri.dev",
-      "targets": "all"
+      "identifier": "re.alwyn974.rslauncher",
+      "targets": "all",
+      "publisher": "Alwyn974",
+      "category": "Game",
+      "appimage": {
+        "bundleMediaFramework": false
+      }
     },
     "security": {
       "csp": null
@@ -42,8 +47,13 @@
         "resizable": true,
         "title": "RS Launcher",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "center": true
       }
-    ]
+    ],
+    "systemTray": {
+      "iconPath": "icons/128x128.png",
+      "title": "RS Launcher"
+    }
   }
 }
