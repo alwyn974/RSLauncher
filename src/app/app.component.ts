@@ -17,4 +17,13 @@ export class AppComponent {
       this.greetingMessage = text;
     });
   }
+
+  onSubmit() {
+    let task = document.getElementById("task");
+    if (!task)
+      return;
+    invoke<string>("submit_task", { task: task.innerText }).then((text) => {
+      this.greetingMessage = text;
+    });
+  }
 }
