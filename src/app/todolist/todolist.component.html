@@ -1,11 +1,129 @@
-<h1>Todo List</h1>
-<form (submit)="addTask()">
-  <input type="text" placeholder="Enter task..." [(ngModel)]="newTask" name="task">
-  <button type="submit">Add</button>
-</form>
-<ul>
-  <li *ngFor="let task of tasks">
-    {{ task }}
-    <button (click)="deleteTask(task)">Delete</button>
-  </li>
-</ul>
+<p-scrollTop></p-scrollTop>
+<p-toast key="toast"></p-toast>
+<p-card>
+    <ng-template pTemplate="title">
+        <div class="flex justify-content-between">
+            <span>Todo List</span>
+            <p-button label="Add todo" pRipple icon="pi pi-plus" (onClick)="this.addDialogOpened = !this.addDialogOpened"></p-button>
+        </div>
+    </ng-template>
+
+    <p-table [value]="tasks"
+             [resizableColumns]="true"
+             [paginator]="true"
+             [rows]="10"
+             [showCurrentPageReport]="true"
+             currentPageReportTemplate="Showing {first} to {last} of {totalRecords} entries"
+             [rowsPerPageOptions]="[10, 25, 50]"
+             styleClass="p-datatable-striped"
+             dataKey="id"
+             [lazy]="true"
+    >
+        <!--
+        <ng-template pTemplate="header" let-columns>
+            <tr>
+                <th [ttSortableColumn]="'title'">
+                    <p-treeTableSortIcon [field]="'title'"></p-treeTableSortIcon>
+                </th>
+                &lt;!&ndash;<th *ngFor="let col of columns" [ttSortableColumn]="col.field">
+                    {{ col.header }}
+                    <p-treeTableSortIcon [field]="col.field"></p-treeTableSortIcon>
+                </th>&ndash;&gt;
+                <th style="width: 10rem">
+                    <p-button icon="pi pi-cog"></p-button>
+                </th>
+            </tr>
+        </ng-template> -->
+        <ng-template pTemplate="body" let-task let-expanded="expanded">
+            <tr>
+                <td>
+                    <div class="flex justify-content-start gap-2">
+                        <div class="flex flex-column sm:flex-row justify-content-start align-items-center flex-1 gap-4">
+<!--                            <button type="button" pButton pRipple [pRowToggler]="task" class="p-button-text p-button-rounded p-button-plain" [icon]="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"></button>-->
+                            <p-button [icon]=" task.completed ? 'pi pi-check' : 'pi pi-times'" (onClick)="this.toggleComplete(task)"></p-button>
+                            <div class="flex flex-column align-items-center sm:align-items-start gap-3">
+                                <div class="text-2xl font-bold text-900">{{ task.title }} </div>
+                                <div class="flex align-items-center gap-3">
+                                    <span class="flex align-items-center gap-2">
+<!--                                        <i class="pi pi-comment"></i>-->
+                                        <span class="font-semibold">{{ task.description }}</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+                <td class="flex flex-column sm:flex-row justify-content-end align-items-center flex-1 gap-4">
+                    <div class="flex flex-column align-items-center sm:align-items-start gap-3">
+                        <p-button icon="pi pi-pencil" styleClass="p-button-warning" (onClick)="this.editTask(task.id)"></p-button>
+                        <p-button icon="pi pi-trash" styleClass="p-button-danger" (onClick)="this.deleteTask(task.id)"></p-button>
+                    </div>
+                </td>
+            </tr>
+        </ng-template>
+
+        <ng-template pTemplate="rowexpansion" let-task>
+            <tr *ngFor="let subtask of task.subtasks">
+                <td>
+                    <div class="flex justify-content-start gap-2">
+                        <div class="flex flex-column sm:flex-row justify-content-start align-items-center flex-1 gap-4">
+                            <p-button [icon]=" subtask.completed ? 'pi pi-check' : 'pi pi-times'"></p-button>
+                            <div class="flex flex-column align-items-center sm:align-items-start gap-3">
+                                <div class="text-xl font-bold text-900">{{ subtask.description }} </div>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+                <td class="flex flex-column sm:flex-row justify-content-end align-items-center flex-1 gap-4">
+                    <div class="flex flex-column align-items-center sm:align-items-start gap-3">
+                        <p-button icon="pi pi-pencil" styleClass="p-button-warning" (onClick)="this.editSubTask(task.id, subtask.id)"></p-button>
+                        <p-button icon="pi pi-trash" styleClass="p-button-danger" (onClick)="this.deleteSubTask(task.id, subtask.id)"></p-button>
+                    </div>
+                </td>
+            </tr>
+        </ng-template>
+
+        <ng-template pTemplate="paginatorleft">
+            <p-button icon="pi pi-refresh" styleClass="p-button-text" (onClick)="this.refreshTasks()"></p-button>
+        </ng-template>
+        <ng-template pTemplate="paginatorright">
+            <p-button icon="pi pi-plus" styleClass="p-button-text" (onClick)="this.addDialogOpened = !this.addDialogOpened"></p-button>
+        </ng-template>
+    </p-table>
+</p-card>
+
+<p-dialog [(visible)]="addDialogOpened" [breakpoints]="{ '960px': '75vw' }">
+    <ng-template pTemplate="header">
+        <span class="text-xl font-bold">Add a Todo</span>
+    </ng-template>
+   <ng-template pTemplate="body">
+       <div class="flex flex-column justify-content-start gap-2">
+           <label>Title</label>
+           <input pInputText id="addTitle" [(ngModel)]="newTask.title" placeholder="Title" />
+
+           <label>Description</label>
+           <input pInputText id="addDescription" [(ngModel)]="newTask.description" placeholder="Description" />
+       </div>
+    </ng-template>
+    <ng-template pTemplate="footer">
+        <p-button icon="pi pi-check" (click)="this.addTask()" label="Ok" styleClass="p-button-text"></p-button>
+    </ng-template>
+</p-dialog>
+
+<p-dialog [(visible)]="editDialogOpened" [breakpoints]="{ '960px': '75vw' }">
+    <ng-template pTemplate="header">
+        <span class="text-xl font-bold">Edit a Todo</span>
+    </ng-template>
+    <ng-template pTemplate="body">
+        <div class="flex flex-column justify-content-start gap-2">
+            <label>Title</label>
+            <input pInputText id="title" [(ngModel)]="newTask.title" placeholder="Title" />
+
+            <label>Description</label>
+            <input pInputText id="description" [(ngModel)]="newTask.description" placeholder="Description" />
+        </div>
+    </ng-template>
+    <ng-template pTemplate="footer">
+        <p-button icon="pi pi-check" (click)="this.saveTask()" label="Ok" styleClass="p-button-text"></p-button>
+    </ng-template>
+</p-dialog>
