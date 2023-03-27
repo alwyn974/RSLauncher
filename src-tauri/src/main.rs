@@ -228,6 +228,7 @@ fn main() {
         for task in tasks {
             state.tasks.lock().unwrap().todos.insert(task.0, task.1);
         }
+        state.tasks.lock().unwrap().id = state.tasks.get_mut().unwrap().todos.keys().max().unwrap() + 1;
     }
 
     tauri::Builder::default()
