@@ -11,13 +11,18 @@ export class TauriService {
     }
 
     async getTasks(): Promise<Todo[]> {
-        let tasks = await invoke<any[]>("get_tasks");
-        let todos = [];
-        for (let [id, task] of (tasks as unknown as Map<number, ITodo>).entries()) {
-            let subtasks = [];
-            if (!task.subtasks)
-                for (let [key, subtask] of (task.subtasks as Map<number, Subtask>).entries())
-                    subtasks.push(new SubTask(subtask.description, subtask.completed, key));
+        let tmpTasks = (await invoke<any>("get_tasks"))
+        let tasks = new Map<number, ITodo>();
+
+        for (let [key, value] of Object.entries(tmpTasks)) tasks.set(Number(key), value as ITodo);
+
+        let todos: Todo[] = [];
+        for (let [id, task] of tasks.entries()) {
+            let subtasks: SubTask[] = [];
+            if (Object.keys(task.subtasks).length !== 0) {
+                for (let [key, subtask] of Object.entries(task.subtasks))
+                    subtasks.push(new SubTask(subtask.description, subtask.completed, Number(key)));
+            }
             todos.push(new Todo(task.title, task.description, subtasks, task.completed, id));
         }
         return todos;
@@ -43,8 +48,21 @@ export class TauriService {
         return invoke<boolean>("edit_task", {id: todo.id, title: todo.title, description: todo.description, completed: todo.completed});
     }
 
-    async completeSubTask(taskId: number, subTaskId: number): Promise<boolean> {
-        return invoke<boolean>("complete_subtask", {id: taskId, subId: subTaskId});
+    async addSubTask(taskId: number, subtask: SubTask) {
+        console.log(taskId, subtask);
+        return invoke<number>("add_subtask", {todoId: taskId, description: subtask.description, completed: subtask.completed});
+    }
+
+    async deleteSubTask(taskId: number, subtaskId: number) {
+        return invoke<boolean>("delete_subtask", {todoId: taskId, id: subtaskId});
+    }
+
+    async completeSubTask(taskId: number, subtask: SubTask): Promise<boolean> {
+        return invoke<boolean>("edit_subtask", {todoId: taskId, id: subtask.id, description: subtask.description, completed: subtask.completed});
+    }
+
+    async editSubTask(taskId: number, subtask: SubTask) : Promise<boolean> {
+        return invoke<boolean>("edit_subtask", {todoId: taskId, id: subtask.id, description: subtask.description, completed: subtask.completed});
     }
 }
 
@@ -56,6 +74,6 @@ interface Subtask {
 interface ITodo {
     title: string;
     description: string;
-    subtasks: Subtask[];
+    subtasks: Map<number, Subtask>;
     completed: boolean;
 }

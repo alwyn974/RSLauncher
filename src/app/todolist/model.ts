@@ -37,8 +37,7 @@ export class SubTask {
     description: string;
     completed: boolean;
     id: number;
-
-    constructor(description: string, completed: boolean, id: number = -1) {
+    constructor(description: string = "", completed: boolean = false, id: number = -1) {
         this.description = description
         this.completed = completed
         this.id = id

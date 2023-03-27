@@ -3,7 +3,6 @@
 
 use std::default::Default;
 use std::sync::Mutex;
-use rand::RngCore;
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufWriter;
@@ -34,6 +33,7 @@ struct Todo {
     description: String,
     subtasks: HashMap<u32, Subtask>,
     completed: bool,
+    subtask_id: u32
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Eq, PartialEq)]
@@ -67,6 +67,7 @@ impl TodoList {
             description,
             subtasks: HashMap::new(),
             completed,
+            subtask_id: 0
         };
         self.todos.insert(id, todo);
         self.id += 1;
@@ -74,13 +75,15 @@ impl TodoList {
         return id
     }
 
-    fn add_subtask(&mut self, todo_id: u32, description: String) -> u32 {
-        let id = self.todos.get(&todo_id).unwrap().subtasks.len() as u32;
+    fn add_subtask(&mut self, todo_id: u32, description: String, completed: bool) -> u32 {
+        let todo = self.todos.get_mut(&todo_id).unwrap();
+        let id = todo.subtask_id;
         let subtask = Subtask {
             description,
-            completed: false,
+            completed,
         };
-        self.todos.get_mut(&todo_id).unwrap().subtasks.insert(id, subtask);
+        todo.subtasks.insert(todo.subtask_id, subtask);
+        todo.subtask_id += 1;
         self.write_to_file().unwrap();
         return id
     }
@@ -120,14 +123,15 @@ impl TodoList {
         }
     }
 
-    fn edit_subtask(&mut self, todo_id: u32, subtask_id: u32, description: String) -> Result<(), &'static str> {
+    fn edit_subtask(&mut self, todo_id: u32, subtask_id: u32, description: String, completed: bool) -> Result<bool, &'static str> {
         return match self.todos.get_mut(&todo_id).unwrap().subtasks.get_mut(&subtask_id) {
             Some(subtask) => {
                 subtask.description = description;
+                subtask.completed = completed;
                 self.write_to_file().unwrap();
-                Ok(())
+                Ok(true)
             },
-            None => Err("Subtask not found"),
+            None => Ok(false)
         }
     }
 
@@ -151,8 +155,8 @@ impl TodoList {
         }
     }
 
-    fn get_todos(&self) -> Vec<Todo> {
-        return self.todos.values().cloned().collect();
+    fn get_todos(&self) -> HashMap<u32, Todo> {
+        return self.todos.clone();
     }
 
     fn get_todo_by_id(&self, todo_id: u32) -> Result<Todo, &'static str> {
@@ -201,17 +205,18 @@ impl AppState {
 }
 
 #[tauri::command]
-fn get_tasks(state: tauri::State<'_, AppState>) -> Vec<Todo> {
+fn get_tasks(state: tauri::State<'_, AppState>) -> HashMap<u32, Todo> {
     return state.tasks.lock().unwrap().get_todos();
 }
 
 #[tauri::command]
 fn add_task(title: &str, description: &str, completed: bool, state: tauri::State<'_, AppState>) -> u32 {
-    return state.tasks.lock().unwrap().add_todo(title.to_string(), description.to_string(), completed)
+    return state.tasks.lock().unwrap().add_todo(title.to_string(), description.to_string(), completed);
 }
 
 #[tauri::command]
 fn delete_task(id: u32, state: tauri::State<'_, AppState>) -> Result<bool, &'static str> {
+    println!("Deleting task: {}", id);
     return state.tasks.lock().unwrap().delete_todo(id);
 }
 
@@ -220,13 +225,34 @@ fn edit_task(id: u32, title: &str, description: &str, completed: bool, state: ta
     return state.tasks.lock().unwrap().edit_todo(id, title.to_string(), description.to_string(), completed);
 }
 
+#[tauri::command]
+fn add_subtask(todo_id: u32, description: &str, completed: bool, state: tauri::State<'_, AppState>) -> u32 {
+    println!("{}, {}, {}", todo_id, description, completed);
+    return state.tasks.lock().unwrap().add_subtask(todo_id, description.to_string(), completed);
+}
+
+#[tauri::command]
+fn delete_subtask(todo_id: u32, id: u32, state: tauri::State<'_, AppState>) -> Result<bool, &'static str> {
+    return state.tasks.lock().unwrap().delete_subtask(todo_id, id);
+}
+
+#[tauri::command]
+fn edit_subtask(todo_id: u32, id: u32, description: &str, completed: bool, state: tauri::State<'_, AppState>) -> Result<bool, &'static str>  {
+    return state.tasks.lock().unwrap().edit_subtask(todo_id, id, description.to_string(), completed)
+}
+
 fn main() {
     let mut state = AppState::new();
 
     if std::fs::read_to_string("tasks.json").is_ok() {
         let tasks: HashMap<u32, Todo> = serde_json::from_str(&std::fs::read_to_string("tasks.json").unwrap()).unwrap();
         for task in tasks {
-            state.tasks.lock().unwrap().todos.insert(task.0, task.1);
+            let todo_opt = state.tasks.lock().unwrap().todos.insert(task.0, task.1);
+            if todo_opt.is_none() {
+                continue;
+            }
+            let mut todo = todo_opt.unwrap();
+            todo.subtask_id = todo.subtasks.keys().max().unwrap() + 1;
         }
         state.tasks.lock().unwrap().id = state.tasks.get_mut().unwrap().todos.keys().max().unwrap() + 1;
     }
@@ -237,7 +263,10 @@ fn main() {
             get_tasks,
             add_task,
             delete_task,
-            edit_task
+            edit_task,
+            add_subtask,
+            delete_subtask,
+            edit_subtask
         ])
         .manage(state)
         .run(tauri::generate_context!())

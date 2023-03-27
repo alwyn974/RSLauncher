@@ -39,7 +39,7 @@
                 <td>
                     <div class="flex justify-content-start gap-2">
                         <div class="flex flex-column sm:flex-row justify-content-start align-items-center flex-1 gap-4">
-<!--                            <button type="button" pButton pRipple [pRowToggler]="task" class="p-button-text p-button-rounded p-button-plain" [icon]="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"></button>-->
+                            <button type="button" pButton pRipple [pRowToggler]="task" class="p-button-text p-button-rounded p-button-plain" [icon]="expanded ? 'pi pi-chevron-down' : 'pi pi-chevron-right'"></button>
                             <p-button [icon]=" task.completed ? 'pi pi-check' : 'pi pi-times'" (onClick)="this.toggleComplete(task)"></p-button>
                             <div class="flex flex-column align-items-center sm:align-items-start gap-3">
                                 <div class="text-2xl font-bold text-900">{{ task.title }} </div>
@@ -55,6 +55,7 @@
                 </td>
                 <td class="flex flex-column sm:flex-row justify-content-end align-items-center flex-1 gap-4">
                     <div class="flex flex-column align-items-center sm:align-items-start gap-3">
+                        <p-button icon="pi pi-plus" styleClass="p-button-success" (onClick)="this.addSubtaskDialogOpened = !this.addSubtaskDialogOpened; this.todoId = task.id"></p-button>
                         <p-button icon="pi pi-pencil" styleClass="p-button-warning" (onClick)="this.editTask(task.id)"></p-button>
                         <p-button icon="pi pi-trash" styleClass="p-button-danger" (onClick)="this.deleteTask(task.id)"></p-button>
                     </div>
@@ -67,7 +68,7 @@
                 <td>
                     <div class="flex justify-content-start gap-2">
                         <div class="flex flex-column sm:flex-row justify-content-start align-items-center flex-1 gap-4">
-                            <p-button [icon]=" subtask.completed ? 'pi pi-check' : 'pi pi-times'"></p-button>
+                            <p-button [icon]=" subtask.completed ? 'pi pi-check' : 'pi pi-times'" (onClick)="this.toggleSubtaskComplete(task, subtask)"></p-button>
                             <div class="flex flex-column align-items-center sm:align-items-start gap-3">
                                 <div class="text-xl font-bold text-900">{{ subtask.description }} </div>
                             </div>
@@ -125,5 +126,35 @@
     </ng-template>
     <ng-template pTemplate="footer">
         <p-button icon="pi pi-check" (click)="this.saveTask()" label="Ok" styleClass="p-button-text"></p-button>
+    </ng-template>
+</p-dialog>
+
+<p-dialog [(visible)]="addSubtaskDialogOpened" [breakpoints]="{ '960px': '75vw' }">
+    <ng-template pTemplate="header">
+        <span class="text-xl font-bold">Add a SubTask</span>
+    </ng-template>
+    <ng-template pTemplate="body">
+        <div class="flex flex-column justify-content-start gap-2">
+            <label>Description</label>
+            <input pInputText id="addSubtaskDescription" [(ngModel)]="subtask.description" placeholder="Description" />
+        </div>
+    </ng-template>
+    <ng-template pTemplate="footer">
+        <p-button icon="pi pi-check" (click)="this.addSubTask()" label="Ok" styleClass="p-button-text"></p-button>
+    </ng-template>
+</p-dialog>
+
+<p-dialog [(visible)]="editSubtaskDialogOpened" [breakpoints]="{ '960px': '75vw' }">
+    <ng-template pTemplate="header">
+        <span class="text-xl font-bold">Edit a SubTask</span>
+    </ng-template>
+    <ng-template pTemplate="body">
+        <div class="flex flex-column justify-content-start gap-2">
+            <label>Description</label>
+            <input pInputText id="editSubTaskDescription" [(ngModel)]="subtask.description" placeholder="Description" />
+        </div>
+    </ng-template>
+    <ng-template pTemplate="footer">
+        <p-button icon="pi pi-check" (click)="this.saveSubTask()" label="Ok" styleClass="p-button-text"></p-button>
     </ng-template>
 </p-dialog>

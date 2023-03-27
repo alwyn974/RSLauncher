@@ -13,8 +13,11 @@ export class TodoListComponent implements OnInit {
     tasks: Todo[] = [];
     addDialogOpened: boolean = false;
     editDialogOpened: boolean = false;
+    addSubtaskDialogOpened: boolean = false;
+    editSubtaskDialogOpened: boolean = false;
     newTask: Todo = new Todo();
-    /*subtasks: SubTask[] = [];*/
+    subtask: SubTask = new SubTask();
+    todoId: number = -1;
 
     constructor(private tauriService: TauriService, private confirmationService: ConfirmationService, private messageService: MessageService) {
     }
@@ -66,12 +69,55 @@ export class TodoListComponent implements OnInit {
         });
     }
 
-    deleteSubTask(taskId: number, subTaskId: number) {
+    addSubTask() {
+        this.addSubtaskDialogOpened = false;
+        if (!this.subtask.description || this.subtask.description.trim().length === 0)
+            return this.messageService.add({severity: 'error', summary: 'Error', detail: 'Description is required', key: 'toast'});
 
+        this.tauriService.addSubTask(this.todoId, this.subtask).then((subTaskId) => {
+            let subtask = { ...this.subtask };
+            subtask.id = subTaskId;
+            let task = this.tasks.find(t => t.id === this.todoId);
+            if (!task)
+                return this.messageService.add({severity: 'error', summary: 'Error', detail: 'Failed to find task', key: 'toast'});
+            task.subtasks.push(subtask);
+            this.subtask = new SubTask();
+        });
+    }
+
+    deleteSubTask(taskId: number, subTaskId: number) {
+        this.tauriService.deleteSubTask(taskId, subTaskId).then((deleted) => {
+            if (!deleted)
+                return this.messageService.add({severity: 'error', summary: 'Error', detail: 'Failed to delete subtask: ' + subTaskId, key: 'toast'});
+            let todo = this.tasks.find((task) => task.id == taskId);
+            if (!todo)
+                return this.messageService.add({severity: 'error', summary: 'Error', detail: 'Failed to find todo: ' + taskId + ' to update subtasks', key: 'toast'});
+            todo.subtasks = todo.subtasks.filter((subtask) => subtask.id !== subTaskId);
+        })
     }
 
     editSubTask(taskId: number, subTaskId: number) {
+        this.editSubtaskDialogOpened = true;
+        let todo = this.tasks.find((task) => task.id == taskId);
+        if (!todo)
+            return this.messageService.add({severity: 'error', summary: 'Error', detail: 'Failed to find todo: ' + taskId, key: 'toast'});
+        let subtask = todo.subtasks.find((subtask) => subtask.id === subTaskId);
+        if (!subtask)
+            return this.messageService.add({severity: 'error', summary: 'Error', detail: 'Failed to find substask: ' + subTaskId, key: 'toast'});
+        this.subtask = subtask!!;
+    }
 
+    saveSubTask() {
+        this.editSubtaskDialogOpened = false;
+        console.log(this.todoId, this.subtask)
+        this.tauriService.editSubTask(this.todoId, this.subtask).then((edited) => {
+            if (!edited)
+                return this.messageService.add({severity: 'error', summary: 'Error', detail: 'Failed to edit subtask', key: 'toast'});
+            this.todoId = -1;
+            this.subtask.id = -1;
+            this.subtask.description = "";
+            this.refreshTasks();
+        });
     }
 
     refreshTasks() {
@@ -87,6 +133,17 @@ export class TodoListComponent implements OnInit {
             if (!completed){
                 task.completed = oldCompleted;
                 return this.messageService.add({severity: 'error', summary: 'Error', detail: 'Failed to complete task', key: 'toast'});
+            }
+        });
+    }
+
+    async toggleSubtaskComplete(task: Todo, subtask: SubTask) {
+        const oldCompleted: boolean = subtask.completed;
+        subtask.completed = !subtask.completed;
+        this.tauriService.completeSubTask(task.id, subtask).then((completed) => {
+            if (!completed){
+                subtask.completed = oldCompleted;
+                return this.messageService.add({severity: 'error', summary: 'Error', detail: 'Failed to complete subtask', key: 'toast'});
             }
         });
     }
