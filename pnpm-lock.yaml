@@ -15,31 +15,31 @@ importers:
         specifier: 2.11.1
         version: 2.11.1
       '@tauri-apps/plugin-dialog':
-        specifier: ~2.7.2
+        specifier: 2.7.2
         version: 2.7.2
       '@tauri-apps/plugin-fs':
-        specifier: ~2.5.1
+        specifier: 2.5.1
         version: 2.5.1
       '@tauri-apps/plugin-http':
-        specifier: ~2.5.9
+        specifier: 2.5.9
         version: 2.5.9
       '@tauri-apps/plugin-log':
-        specifier: ~2.9.0
+        specifier: 2.9.0
         version: 2.9.0
       '@tauri-apps/plugin-opener':
         specifier: 2.5.4
         version: 2.5.4
       '@tauri-apps/plugin-os':
-        specifier: ~2.3.2
+        specifier: 2.3.2
         version: 2.3.2
       '@tauri-apps/plugin-positioner':
-        specifier: ~2.3.3
+        specifier: 2.3.3
         version: 2.3.3
       '@tauri-apps/plugin-updater':
-        specifier: ~2.10.1
+        specifier: 2.10.1
         version: 2.10.1
       '@tauri-apps/plugin-window-state':
-        specifier: ~2.4.1
+        specifier: 2.4.1
         version: 2.4.1
       tailwindcss:
         specifier: 4.3.3
