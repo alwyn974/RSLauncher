@@ -17,8 +17,8 @@ jobs:
       fail-fast: true
       matrix:
         include:
-          - platform: ubuntu-latest
-            args: ""
+#          - platform: ubuntu-latest
+#            args: ""
           - platform: windows-latest
             args: ""
     runs-on: ${{ matrix.platform }}
