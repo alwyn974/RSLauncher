@@ -1,1 +1,184 @@
+/*
+  DIRECTION CONTRACT — RSLauncher
+  THESIS: The launcher is drawn with Minecraft's own menu grammar — beveled block
+    buttons, pixel lettering, dark tiled dirt — not a generic dark desktop app.
+  OWN-WORLD: Square corners always; 2px black borders; inset bevel highlight/shadow
+    pairs; Monocraft pixel type with hard 2px text shadow; green = Play only,
+    gold = info/warn, red = error/danger; darkened dirt-tile ground.
+  STORY: Open → sign in with Microsoft → pick account → press the big green PLAY →
+    watch files download with percent/speed/ETA → game runs, logs stream.
+  FIRST VIEWPORT: Pixel logo over dirt ground, Microsoft sign-in bevel button,
+    saved accounts as avatar blocks below; after login the Play view owns the
+    window: account switcher top-left, giant green PLAY center, progress panel
+    docked at the bottom.
+  FORM: Operate-mode desktop tool in the game's menu language; staging chosen
+    directly (precisely specified brief), no concept roll.
+*/
+
 @import "tailwindcss";
+
+@font-face {
+  font-family: "Monocraft";
+  src: url("./fonts/Monocraft.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Monocraft";
+  src: url("./fonts/Monocraft-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-pixel: "Monocraft", "Courier New", monospace;
+  --font-sans: "Segoe UI", system-ui, -apple-system, Arial, sans-serif;
+  --font-mono: "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+
+  /* Ground & panels */
+  --color-mc-bg: #141414;
+  --color-mc-panel: #1f1f1f;
+  --color-mc-panel-2: #262626;
+  --color-mc-inset: #0d0d0d;
+  --color-mc-border: #000000;
+
+  /* Text */
+  --color-mc-text: #e8e8e8;
+  --color-mc-muted: #a8a8a8;
+  --color-mc-faint: #8a8a8a;
+
+  /* Roles */
+  --color-mc-green: #57a636;
+  --color-mc-green-hi: #6fc24c;
+  --color-mc-green-lo: #3c7a24;
+  --color-mc-gold: #fcdb4d;
+  --color-mc-red: #e5484d;
+  --color-mc-red-lo: #a83236;
+  --color-mc-stone: #6f6f6f;
+  --color-mc-stone-hi: #828282;
+  --color-mc-stone-lo: #4a4a4a;
+
+  --breakpoint-xs: 30rem;
+}
+
+@layer base {
+  html,
+  body,
+  #app {
+    height: 100%;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    color: var(--color-mc-text);
+    background-color: var(--color-mc-bg);
+    background-image:
+      linear-gradient(rgba(14, 14, 14, 0.75), rgba(14, 14, 14, 0.75)),
+      url("./dirt.svg");
+    background-size: auto, 64px 64px;
+    image-rendering: pixelated;
+    -webkit-font-smoothing: antialiased;
+    user-select: none;
+  }
+
+  ::selection {
+    background: #6b5a1e;
+    color: #fff;
+  }
+}
+
+@layer components {
+  /* Hard offset text shadow for pixel lettering (MC style) */
+  .pixel-shadow {
+    text-shadow: 2px 2px 0 rgba(0, 0, 0, 0.55);
+  }
+  .pixel-shadow-sm {
+    text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.55);
+  }
+
+  /* Raised bevel — MC button grammar: light top-left, dark bottom-right */
+  .mc-bevel {
+    border: 2px solid var(--color-mc-border);
+    box-shadow:
+      inset 2px 2px 0 rgba(255, 255, 255, 0.28),
+      inset -2px -2px 0 rgba(0, 0, 0, 0.42);
+  }
+
+  /* Pressed / sunken bevel */
+  .mc-bevel-pressed {
+    border: 2px solid var(--color-mc-border);
+    box-shadow:
+      inset -2px -2px 0 rgba(255, 255, 255, 0.14),
+      inset 2px 2px 0 rgba(0, 0, 0, 0.5);
+  }
+
+  /* Sunken well — inputs, progress track, log console */
+  .mc-inset-well {
+    background: var(--color-mc-inset);
+    border: 2px solid var(--color-mc-border);
+    box-shadow:
+      inset 2px 2px 0 rgba(0, 0, 0, 0.55),
+      inset -2px -2px 0 rgba(255, 255, 255, 0.07);
+  }
+
+  /* Raised panel */
+  .mc-panel {
+    background: var(--color-mc-panel);
+    border: 2px solid var(--color-mc-border);
+    box-shadow:
+      inset 2px 2px 0 rgba(255, 255, 255, 0.09),
+      inset -2px -2px 0 rgba(0, 0, 0, 0.4);
+  }
+
+  /* Blocky range slider (RAM) */
+  input[type="range"].mc-range {
+    appearance: none;
+    -webkit-appearance: none;
+    height: 10px;
+    background: var(--color-mc-inset);
+    border: 2px solid var(--color-mc-border);
+    box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.55);
+    cursor: pointer;
+  }
+  input[type="range"].mc-range::-webkit-slider-thumb {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 16px;
+    height: 24px;
+    background: var(--color-mc-gold);
+    border: 2px solid var(--color-mc-border);
+    box-shadow:
+      inset 2px 2px 0 rgba(255, 255, 255, 0.3),
+      inset -2px -2px 0 rgba(0, 0, 0, 0.4);
+  }
+  input[type="range"].mc-range::-moz-range-thumb {
+    width: 12px;
+    height: 20px;
+    border-radius: 0;
+    background: var(--color-mc-gold);
+    border: 2px solid var(--color-mc-border);
+    box-shadow:
+      inset 2px 2px 0 rgba(255, 255, 255, 0.3),
+      inset -2px -2px 0 rgba(0, 0, 0, 0.4);
+  }
+
+  input[type="number"].mc-input,
+  input[type="text"].mc-input,
+  textarea.mc-input {
+    background: var(--color-mc-inset);
+    border: 2px solid var(--color-mc-border);
+    box-shadow: inset 2px 2px 0 rgba(0, 0, 0, 0.55);
+    color: var(--color-mc-text);
+    padding: 0.45rem 0.6rem;
+    outline: none;
+    user-select: text;
+  }
+  input[type="number"].mc-input:focus,
+  input[type="text"].mc-input:focus,
+  textarea.mc-input:focus {
+    border-color: var(--color-mc-gold);
+  }
+}
