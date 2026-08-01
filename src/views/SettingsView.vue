@@ -1,17 +1,28 @@
 <script setup lang="ts">
 /**
- * Settings: RAM allocation, game resolution, custom JVM arguments.
- * Saved to localStorage through the store.
+ * Settings: RAM, resolution, server address, custom JVM arguments.
  */
-import { reactive } from "vue";
+import { computed, reactive } from "vue";
 import { launcher, type Settings } from "../stores/launcher";
 import PixelButton from "../components/PixelButton.vue";
 import PixelIcon from "../components/PixelIcon.vue";
 
 const draft = reactive<Settings>({ ...launcher.state.settings });
 
+const ramMin = computed(() => launcher.state.memory.minGb);
+const ramMax = computed(() => Math.max(launcher.state.memory.totalGb, ramMin.value));
+const ramRecommended = computed(() =>
+  Math.min(
+    Math.max(launcher.state.memory.recommendedGb, ramMin.value),
+    ramMax.value,
+  ),
+);
+
 function clampDraft() {
-  draft.ramGb = Math.min(16, Math.max(2, Number(draft.ramGb) || 2));
+  draft.ramGb = Math.min(
+    ramMax.value,
+    Math.max(ramMin.value, Math.round(Number(draft.ramGb) || ramRecommended.value)),
+  );
   draft.width = Math.min(7680, Math.max(640, Number(draft.width) || 1280));
   draft.height = Math.min(4320, Math.max(480, Number(draft.height) || 720));
 }
@@ -44,9 +55,9 @@ function reset() {
           <input
             v-model.number="draft.ramGb"
             type="range"
-            min="2"
-            max="16"
-            step="0.5"
+            :min="ramMin"
+            :max="ramMax"
+            step="1"
             class="mc-range flex-1"
             aria-label="RAM allocation in gigabytes"
           />
@@ -55,7 +66,8 @@ function reset() {
           </span>
         </div>
         <p class="mt-2 text-xs text-mc-muted">
-          RAM allocated to the game. 4–6 GB is plenty for this modpack.
+          Pack recommends {{ ramRecommended }} GB (CurseForge).
+          Max {{ ramMax }} GB (this PC).
         </p>
       </section>
 
@@ -101,6 +113,34 @@ function reset() {
           </button>
           Fullscreen
         </label>
+      </section>
+
+      <!-- Server -->
+      <section class="mc-panel p-4">
+        <h2 class="font-pixel pixel-shadow-sm text-xs text-mc-gold">Server</h2>
+        <label class="mt-3 flex flex-col gap-1 text-xs text-mc-muted">
+          Display name
+          <input
+            v-model="draft.serverName"
+            type="text"
+            spellcheck="false"
+            placeholder="RS Server"
+            class="mc-input w-full font-mono placeholder:text-mc-faint"
+          />
+        </label>
+        <label class="mt-3 flex flex-col gap-1 text-xs text-mc-muted">
+          Address
+          <input
+            v-model="draft.serverAddress"
+            type="text"
+            spellcheck="false"
+            placeholder="play.example.com"
+            class="mc-input w-full font-mono placeholder:text-mc-faint"
+          />
+        </label>
+        <p class="mt-2 text-xs text-mc-muted">
+          Shown in Multiplayer. Quick Play connects straight to this address.
+        </p>
       </section>
 
       <!-- Java -->

@@ -7,10 +7,11 @@ import { launcher } from "../stores/launcher";
 import AvatarBlock from "../components/AvatarBlock.vue";
 import PixelButton from "../components/PixelButton.vue";
 import PixelIcon from "../components/PixelIcon.vue";
+import SignInStatus from "../components/SignInStatus.vue";
 </script>
 
 <template>
-  <main class="relative flex h-full flex-col items-center justify-center gap-8 p-8">
+  <main class="relative flex h-full flex-col items-center justify-center gap-6 p-8">
     <div class="text-center">
       <h1 class="font-pixel pixel-shadow text-4xl tracking-wide text-white">
         RS<span class="text-mc-gold">LAUNCHER</span>
@@ -31,11 +32,46 @@ import PixelIcon from "../components/PixelIcon.vue";
         <rect y="9" width="7" height="7" fill="#00a4ef" />
         <rect x="9" y="9" width="7" height="7" fill="#ffb900" />
       </svg>
-      {{ launcher.state.loginPending ? "Signing in..." : "Sign in with Microsoft" }}
+      {{ launcher.state.loginPending ? "Signing in…" : "Sign in with Microsoft" }}
     </PixelButton>
 
+    <SignInStatus v-if="launcher.state.loginPending" />
+
     <div
-      v-if="launcher.state.accounts.length > 0"
+      v-if="launcher.state.loginError && !launcher.state.loginPending"
+      class="mc-panel w-full min-w-0 max-w-md overflow-hidden border-mc-red p-4"
+      role="alert"
+    >
+      <p class="font-pixel pixel-shadow-sm mb-2 text-sm text-mc-red">
+        Sign-in failed
+      </p>
+      <p
+        class="max-h-28 overflow-y-auto text-sm leading-relaxed break-all whitespace-pre-wrap text-mc-text"
+      >
+        {{ launcher.state.loginError }}
+      </p>
+      <div
+        v-if="launcher.loginLogs.value.length > 0"
+        class="mc-inset-well mt-3 max-h-32 overflow-y-auto p-2 font-mono text-[11px] leading-5 select-text"
+      >
+        <p
+          v-for="(line, i) in launcher.loginLogs.value"
+          :key="i"
+          class="break-all whitespace-pre-wrap"
+          :class="{
+            'text-mc-red': line.level === 'ERROR',
+            'text-mc-gold': line.level === 'WARN',
+            'text-mc-text': line.level === 'INFO',
+          }"
+        >
+          <span class="text-mc-faint">[{{ line.time }}] [{{ line.source }}]</span>
+          {{ line.message }}
+        </p>
+      </div>
+    </div>
+
+    <div
+      v-if="launcher.state.accounts.length > 0 && !launcher.state.loginPending"
       class="mc-panel w-full max-w-sm p-3"
     >
       <p class="font-pixel pixel-shadow-sm mb-2 text-[10px] text-mc-muted">

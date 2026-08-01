@@ -181,4 +181,87 @@
   textarea.mc-input:focus {
     border-color: var(--color-mc-gold);
   }
+
+  /* Sign-in status panel entrance */
+  .sign-in-status {
+    animation: mc-status-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  /* Three-block pixel loader — stepped opacity/height pulse */
+  .mc-spinner {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    height: 14px;
+  }
+  .mc-spinner span {
+    display: block;
+    width: 6px;
+    height: 6px;
+    background: var(--color-mc-gold);
+    border: 1px solid var(--color-mc-border);
+    box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.35);
+    animation: mc-block-pulse 900ms cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  }
+  .mc-spinner span:nth-child(2) {
+    animation-delay: 150ms;
+  }
+  .mc-spinner span:nth-child(3) {
+    animation-delay: 300ms;
+  }
+}
+
+@keyframes mc-status-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mc-block-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scaleY(0.7);
+    background: var(--color-mc-stone-hi);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1.35);
+    background: var(--color-mc-gold);
+  }
+}
+
+.mc-step-pulse {
+  animation: mc-step-glow 900ms cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
+@keyframes mc-step-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sign-in-status {
+    animation: none;
+  }
+  .mc-spinner span {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    background: var(--color-mc-gold);
+  }
+  .mc-step-pulse {
+    animation: none;
+    opacity: 1;
+  }
 }

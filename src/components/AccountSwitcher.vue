@@ -53,7 +53,7 @@ function remove(id: string) {
 
     <div
       v-if="open"
-      class="mc-panel absolute left-0 z-50 mt-1 w-64 p-1"
+      class="mc-panel absolute left-0 z-50 mt-1 w-64 min-w-0 overflow-hidden p-1"
       role="listbox"
       aria-label="Accounts"
     >
@@ -95,6 +95,14 @@ function remove(id: string) {
         </span>
         {{ launcher.state.loginPending ? "Signing in..." : "Add account" }}
       </button>
+
+      <p
+        v-if="launcher.state.loginError"
+        class="max-h-32 min-w-0 overflow-y-auto border-t-2 border-mc-border px-2 py-2 text-sm leading-relaxed break-all whitespace-pre-wrap text-mc-red"
+        role="alert"
+      >
+        {{ launcher.state.loginError }}
+      </p>
     </div>
   </div>
 </template>

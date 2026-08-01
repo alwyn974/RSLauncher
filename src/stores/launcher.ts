@@ -1,18 +1,25 @@
 /**
- * Mock launcher state.
- *
- * Everything here is simulated, but the shapes deliberately mirror what the
- * future Rust backend will expose over Tauri commands/events:
+ * Launcher state — backed by Tauri commands/events:
  *
  *   commands: login_with_microsoft, remove_account, set_active_account,
- *             get_settings, save_settings, play, cancel
+ *             get_settings, save_settings, play, cancel, stop
  *   events:   "launch://progress" -> Progress
- *             "game://log"        -> LogLine
- *
- * Swapping the mock for real `invoke()`/`listen()` calls should not touch the
- * views or components.
+ *             "auth://device_code" -> { code, url }
+ *             "auth://status"     -> { step }
+ *             "instance://status" -> { installed }
+ *   logs:     tauri-plugin-log (attachConsole + attachLogger)
  */
 import { computed, reactive } from "vue";
+import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import {
+  attachConsole,
+  attachLogger,
+  error as logError,
+  info as logInfo,
+  warn as logWarn,
+  LogLevel,
+} from "@tauri-apps/plugin-log";
 
 export interface Account {
   id: string;
@@ -27,22 +34,41 @@ export interface Settings {
   height: number;
   fullscreen: boolean;
   jvmArgs: string;
+  serverName: string;
+  serverAddress: string;
+}
+
+export interface MemoryInfo {
+  totalGb: number;
+  recommendedGb: number;
+  minGb: number;
 }
 
 export type LaunchStage =
   | "idle"
   | "preparing"
+  | "java"
+  | "loader"
   | "downloading"
   | "verifying"
   | "launching"
   | "running"
   | "error";
 
+/** Ordered launch pipeline shown in the progress panel. */
+export const LAUNCH_STEPS: { id: LaunchStage; label: string }[] = [
+  { id: "preparing", label: "Prepare" },
+  { id: "java", label: "Java" },
+  { id: "loader", label: "Loader" },
+  { id: "downloading", label: "Download" },
+  { id: "verifying", label: "Extract" },
+  { id: "launching", label: "Launch" },
+  { id: "running", label: "Running" },
+];
+
 export interface Progress {
   stage: LaunchStage;
-  /** Current step description, e.g. "Downloading files". */
   step: string;
-  /** File currently being processed. */
   file: string;
   filesDone: number;
   filesTotal: number;
@@ -58,336 +84,374 @@ export interface LogLine {
   message: string;
 }
 
+export interface DeviceCode {
+  code: string;
+  url: string;
+}
+
 export type View = "play" | "settings" | "logs";
 
 export const MODPACK = {
-  name: "RS Modpack",
-  minecraft: "1.20.1",
-  loader: "Fabric 0.16.9",
-  modCount: 214,
+  name: "All the Mods 10",
+  minecraft: "1.21.1",
+  loader: "NeoForge 21.1.241",
+  modCount: 482,
+  version: "7.2",
 } as const;
 
+/** Fallback until CurseForge `minecraft.recommendedRam` is fetched (ATM10 = 8 GiB). */
 const DEFAULT_SETTINGS: Settings = {
-  ramGb: 4,
+  ramGb: 8,
   width: 1280,
   height: 720,
   fullscreen: false,
   jvmArgs: "",
+  serverName: "Eh Zebi",
+  serverAddress: "mc.alwyn974.re",
 };
 
-const LS_ACCOUNTS = "rs.accounts";
-const LS_ACTIVE = "rs.activeAccount";
-const LS_SETTINGS = "rs.settings";
+const DEFAULT_MEMORY: MemoryInfo = {
+  totalGb: 16,
+  recommendedGb: 8,
+  minGb: 2,
+};
 
-function readLs<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeLs(key: string, value: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    /* storage unavailable — session-only state */
-  }
-}
-
-function now(): string {
-  return new Date().toLocaleTimeString("en-GB", { hour12: false });
-}
-
-function mulberry32(seed: number) {
-  let a = seed >>> 0;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-/** Fake gamertags so repeated mock logins produce distinct accounts. */
-const MOCK_NAMES = [
-  "BlockSmith42",
-  "RedstoneRay",
-  "CreeperHunter",
-  "EnderWitch",
-  "DiamondDigger",
-  "NetherNomad",
-  "CraftyFox",
-  "ObsidianOwl",
-];
-
-/** Mock modpack file list for the download simulation. */
-const MOCK_FILES = [
-  "mods/jei-1.20.1-fabric-15.20.0.jar",
-  "mods/sodium-fabric-0.5.11+mc1.20.1.jar",
-  "mods/lithium-fabric-0.11.2.jar",
-  "mods/fabric-api-0.92.2+1.20.1.jar",
-  "mods/create-fabric-0.5.1f.jar",
-  "mods/iris-1.7.2+1.20.1.jar",
-  "mods/terrablender-fabric-3.0.1.7.jar",
-  "mods/biomesoplenty-fabric-18.0.0.592.jar",
-  "mods/waystones-fabric-14.1.5.jar",
-  "mods/appleskin-fabric-2.5.1.jar",
-  "config/jei/jei-client.ini",
-  "config/sodium-options.json",
-  "config/create-client.toml",
-  "resourcepacks/rs-overhaul-1.4.zip",
-  "libraries/net/fabricmc/loader/0.16.9/loader-0.16.9.jar",
-  "libraries/org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3.jar",
-  "libraries/com/google/guava/guava/32.1.2/guava-32.1.2.jar",
-  "assets/minecraft/textures/blocks.index",
-  "assets/minecraft/lang/en_us.json",
-  "versions/1.20.1/1.20.1.jar",
-];
-
-const GAME_LOG_POOL: Array<[LogLine["level"], string, string]> = [
-  ["INFO", "minecraft", "Setting user: %u"],
-  ["INFO", "minecraft", "Backend library: LWJGL version 3.3.3"],
-  ["INFO", "fabricloader", "Loading 214 mods"],
-  ["INFO", "sodium", "OpenGL 4.6 detected, using GL4.6 renderer"],
-  ["INFO", "create", "Registering kinetic stress network"],
-  ["WARN", "minecraft", "Ambiguity between arguments [teleport, location] and [teleport, destination]"],
-  ["INFO", "minecraft", "Created: 1024x512x4 minecraft:textures/atlas/blocks.png"],
-  ["INFO", "minecraft", "Narrator library successfully loaded"],
-  ["INFO", "minecraft", "Reloading ResourceManager: Default, Fabric Mods, rs-overhaul-1.4.zip"],
-  ["INFO", "iris", "Shaders are disabled by configuration"],
-  ["WARN", "waystones", "Config value 'worldGen' is deprecated"],
-  ["INFO", "minecraft", "Sound engine started"],
-  ["INFO", "minecraft", "Connecting to rs.example.org, 25565"],
-];
+const IDLE_PROGRESS: Progress = {
+  stage: "idle",
+  step: "",
+  file: "",
+  filesDone: 0,
+  filesTotal: 0,
+  percent: 0,
+  bytesPerSec: 0,
+  etaSec: 0,
+};
 
 interface LauncherState {
   accounts: Account[];
   activeAccountId: string | null;
   settings: Settings;
+  memory: MemoryInfo;
   view: View;
   loginPending: boolean;
+  loginError: string | null;
+  deviceCode: DeviceCode | null;
+  authStep: string;
   progress: Progress;
+  /** Last pipeline step reached — kept on error/cancel so the UI marks the right step. */
+  progressPhase: LaunchStage;
   logs: LogLine[];
-  timers: number[];
+  installed: boolean;
+  ready: boolean;
 }
 
 const state = reactive<LauncherState>({
-  accounts: readLs<Account[]>(LS_ACCOUNTS, []),
-  activeAccountId: readLs<string | null>(LS_ACTIVE, null),
-  settings: { ...DEFAULT_SETTINGS, ...readLs<Partial<Settings>>(LS_SETTINGS, {}) },
+  accounts: [],
+  activeAccountId: null,
+  settings: { ...DEFAULT_SETTINGS },
+  memory: { ...DEFAULT_MEMORY },
   view: "play",
   loginPending: false,
-  progress: {
-    stage: "idle",
-    step: "",
-    file: "",
-    filesDone: 0,
-    filesTotal: 0,
-    percent: 0,
-    bytesPerSec: 0,
-    etaSec: 0,
-  },
+  loginError: null,
+  deviceCode: null,
+  authStep: "",
+  progress: { ...IDLE_PROGRESS },
+  progressPhase: "preparing",
   logs: [],
-  timers: [],
+  installed: false,
+  ready: false,
 });
+
+function isPipelineStage(stage: string): stage is LaunchStage {
+  return LAUNCH_STEPS.some((s) => s.id === stage);
+}
+
+function applyProgress(next: Progress) {
+  const stage = (next.stage as LaunchStage) || "idle";
+  if (isPipelineStage(stage) && stage !== "error") {
+    state.progressPhase = stage;
+  }
+  state.progress = { ...IDLE_PROGRESS, ...next, stage };
+}
+
+function errorMessage(error: unknown): string {
+  if (typeof error === "string" && error.trim()) return error;
+  if (error && typeof error === "object") {
+    const obj = error as { message?: unknown; error?: unknown };
+    if (typeof obj.message === "string" && obj.message.trim()) return obj.message;
+    if (typeof obj.error === "string" && obj.error.trim()) return obj.error;
+  }
+  const fallback = String(error ?? "Unknown error");
+  return fallback === "[object Object]" ? "Sign-in failed" : fallback;
+}
 
 const activeAccount = computed<Account | null>(
   () => state.accounts.find((a) => a.id === state.activeAccountId) ?? null,
 );
 
 const busy = computed(() =>
-  ["preparing", "downloading", "verifying", "launching"].includes(state.progress.stage),
+  ["preparing", "java", "loader", "downloading", "verifying", "launching"].includes(
+    state.progress.stage,
+  ),
 );
 
-function log(level: LogLine["level"], source: string, message: string) {
+/** Logs captured since the current (or last) sign-in attempt began. */
+let loginLogCursor = 0;
+const loginLogs = computed(() => state.logs.slice(loginLogCursor));
+
+const loginStatus = computed(() => {
+  if (state.authStep.trim()) return state.authStep;
+  if (state.deviceCode) return "Waiting for Microsoft approval…";
+  if (state.loginPending) return "Contacting Microsoft…";
+  return "";
+});
+
+let unlisteners: UnlistenFn[] = [];
+let initPromise: Promise<void> | null = null;
+
+function now(): string {
+  return new Date().toLocaleTimeString("en-GB", { hour12: false });
+}
+
+function pushLog(level: LogLine["level"], source: string, message: string) {
   state.logs.push({ time: now(), level, source, message });
   if (state.logs.length > 2000) state.logs.splice(0, state.logs.length - 2000);
 }
 
-function after(ms: number, fn: () => void) {
-  const id = window.setTimeout(fn, ms);
-  state.timers.push(id);
-  return id;
+/** Frontend + backend logs all go through tauri-plugin-log → attachLogger → UI. */
+function log(level: LogLine["level"], source: string, message: string) {
+  const line = `[${source}] ${message}`;
+  void (level === "ERROR"
+    ? logError(line)
+    : level === "WARN"
+      ? logWarn(line)
+      : logInfo(line));
 }
 
-function every(ms: number, fn: () => boolean | void) {
-  const id = window.setInterval(() => {
-    if (fn() === false) window.clearInterval(id);
-  }, ms);
-  state.timers.push(id);
-  return id;
+function parseBackendLog(message: string): { source: string; message: string } {
+  const match = /^\[([^\]]+)\]\s*([\s\S]*)$/.exec(message);
+  if (!match) return { source: "backend", message };
+  return { source: match[1] || "backend", message: match[2] ?? "" };
 }
 
-function clearTimers() {
-  for (const id of state.timers) {
-    window.clearTimeout(id);
-    window.clearInterval(id);
-  }
-  state.timers = [];
+function levelFromPlugin(level: LogLevel): LogLine["level"] {
+  if (level >= LogLevel.Error) return "ERROR";
+  if (level >= LogLevel.Warn) return "WARN";
+  return "INFO";
 }
 
-// --- commands (mock) -------------------------------------------------------
+function syncActive(accounts: Account[], active: Account | null) {
+  state.accounts = accounts;
+  state.activeAccountId = active?.id ?? accounts[0]?.id ?? null;
+}
 
-/** login_with_microsoft — fake device-code round trip. */
-function login() {
+export async function initLauncher() {
+  if (initPromise) return initPromise;
+  initPromise = (async () => {
+    for (const u of unlisteners) u();
+    unlisteners = [];
+
+    unlisteners.push(
+      await attachConsole(),
+      await attachLogger(({ level, message }) => {
+        if (level < LogLevel.Info) return;
+        const parsed = parseBackendLog(message);
+        pushLog(levelFromPlugin(level), parsed.source, parsed.message);
+      }),
+      await listen<Progress>("launch://progress", (e) => {
+        applyProgress({
+          ...IDLE_PROGRESS,
+          ...e.payload,
+          stage: (e.payload.stage as LaunchStage) || "idle",
+        });
+        if (e.payload.stage === "running" || e.payload.stage === "idle") {
+          void refreshInstallStatus();
+        }
+      }),
+      await listen<DeviceCode>("auth://device_code", (e) => {
+        state.deviceCode = e.payload;
+        if (state.loginPending) {
+          log(
+            "INFO",
+            "auth",
+            `Device code ready: ${e.payload.code} — open ${e.payload.url}`,
+          );
+        }
+      }),
+      await listen<{ step: string }>("auth://status", (e) => {
+        state.authStep = e.payload.step;
+      }),
+      await listen<{ installed: boolean }>("instance://status", (e) => {
+        state.installed = e.payload.installed;
+      }),
+      await listen<MemoryInfo>("memory://updated", (e) => {
+        state.memory = { ...DEFAULT_MEMORY, ...e.payload };
+        // Only bump default allocation if the user hasn't customized it yet.
+        if (state.settings.ramGb === DEFAULT_SETTINGS.ramGb) {
+          state.settings.ramGb = Math.min(
+            Math.max(state.memory.recommendedGb, state.memory.minGb),
+            state.memory.totalGb,
+          );
+        }
+      }),
+    );
+
+    try {
+      const [accounts, settings, active, memory, status] = await Promise.all([
+        invoke<Account[]>("list_accounts"),
+        invoke<Settings>("get_settings"),
+        invoke<Account | null>("get_active_account"),
+        invoke<MemoryInfo>("get_memory_info"),
+        invoke<{ installed: boolean }>("get_instance_status"),
+      ]);
+      syncActive(accounts, active);
+      state.memory = { ...DEFAULT_MEMORY, ...memory };
+      state.installed = status.installed;
+      state.settings = {
+        ...DEFAULT_SETTINGS,
+        ...settings,
+        ramGb: Math.min(
+          Math.max(settings.ramGb ?? state.memory.recommendedGb, state.memory.minGb),
+          state.memory.totalGb,
+        ),
+      };
+    } catch (e) {
+      log("ERROR", "launcher", `Failed to load state: ${errorMessage(e)}`);
+    } finally {
+      state.ready = true;
+    }
+  })();
+  return initPromise;
+}
+
+async function login() {
   if (state.loginPending) return;
   state.loginPending = true;
-  log("INFO", "launcher", "Opening Microsoft sign-in...");
-  after(1600, () => {
-    const taken = new Set(state.accounts.map((a) => a.username));
-    const username =
-      MOCK_NAMES.find((n) => !taken.has(n)) ?? `Player${state.accounts.length + 1}`;
-    const seed = Math.floor(Math.random() * 2 ** 31);
-    const account: Account = {
-      id: crypto.randomUUID(),
-      username,
-      uuid: crypto.randomUUID(),
-      avatarSeed: seed,
-    };
-    state.accounts.push(account);
-    state.activeAccountId = account.id;
+  state.loginError = null;
+  state.deviceCode = null;
+  state.authStep = "";
+  loginLogCursor = state.logs.length;
+  log("INFO", "launcher", "Opening Microsoft sign-in…");
+  try {
+    const account = await invoke<Account>("login_with_microsoft");
+    const accounts = await invoke<Account[]>("list_accounts");
+    syncActive(accounts, account);
+    state.loginError = null;
+    log("INFO", "launcher", `Signed in as ${account.username}`);
+  } catch (e) {
+    const message = errorMessage(e);
+    state.loginError = message;
+    log("ERROR", "launcher", message);
+  } finally {
     state.loginPending = false;
-    writeLs(LS_ACCOUNTS, state.accounts);
-    writeLs(LS_ACTIVE, state.activeAccountId);
-    log("INFO", "launcher", `Signed in as ${username}`);
-  });
-}
-
-/** remove_account */
-function removeAccount(id: string) {
-  state.accounts = state.accounts.filter((a) => a.id !== id);
-  if (state.activeAccountId === id) {
-    state.activeAccountId = state.accounts[0]?.id ?? null;
+    state.deviceCode = null;
+    state.authStep = "";
   }
-  writeLs(LS_ACCOUNTS, state.accounts);
-  writeLs(LS_ACTIVE, state.activeAccountId);
 }
 
-/** set_active_account */
-function setActiveAccount(id: string) {
-  if (state.accounts.some((a) => a.id === id)) {
+async function removeAccount(id: string) {
+  try {
+    await invoke("remove_account", { id });
+    const [accounts, active] = await Promise.all([
+      invoke<Account[]>("list_accounts"),
+      invoke<Account | null>("get_active_account"),
+    ]);
+    syncActive(accounts, active);
+  } catch (e) {
+    log("ERROR", "launcher", String(e));
+  }
+}
+
+async function setActiveAccount(id: string) {
+  try {
+    await invoke("set_active_account", { id });
     state.activeAccountId = id;
-    writeLs(LS_ACTIVE, id);
+  } catch (e) {
+    log("ERROR", "launcher", String(e));
   }
 }
 
-/** save_settings */
-function saveSettings(next: Settings) {
-  state.settings = { ...next };
-  writeLs(LS_SETTINGS, state.settings);
-  log("INFO", "launcher", "Settings saved");
+async function saveSettings(next: Settings) {
+  try {
+    const saved = await invoke<Settings>("save_settings", { settings: next });
+    state.settings = { ...DEFAULT_SETTINGS, ...saved };
+    log("INFO", "launcher", "Settings saved");
+  } catch (e) {
+    log("ERROR", "launcher", String(e));
+  }
 }
 
 function resetSettings(): Settings {
-  return { ...DEFAULT_SETTINGS };
+  const ramGb = Math.min(
+    Math.max(state.memory.recommendedGb, state.memory.minGb),
+    state.memory.totalGb,
+  );
+  return { ...DEFAULT_SETTINGS, ramGb };
 }
 
-/** play — simulated launch pipeline. */
-function play() {
-  if (busy.value || !activeAccount.value) return;
-  const s = state.settings;
-  const account = activeAccount.value;
+async function refreshInstallStatus() {
+  try {
+    const status = await invoke<{ installed: boolean }>("get_instance_status");
+    state.installed = status.installed;
+  } catch {
+    /* ignore */
+  }
+}
 
-  // --- preparing -----------------------------------------------------------
-  state.progress = {
+async function play(quickPlay = false) {
+  if (busy.value || !activeAccount.value) return;
+  const mode = quickPlay ? "Quick Play" : "Play";
+  log(
+    "INFO",
+    "launcher",
+    `${mode}: ${MODPACK.name} ${MODPACK.version} for ${activeAccount.value.username}`,
+  );
+  applyProgress({
+    ...IDLE_PROGRESS,
     stage: "preparing",
     step: "Preparing launch",
-    file: "",
-    filesDone: 0,
-    filesTotal: MOCK_FILES.length,
-    percent: 0,
-    bytesPerSec: 0,
-    etaSec: 0,
-  };
-  log("INFO", "launcher", `Starting ${MODPACK.name} for ${account.username}`);
-  log("INFO", "launcher", `RAM: ${s.ramGb} GB · ${s.fullscreen ? "fullscreen" : `${s.width}x${s.height}`}`);
-  if (s.jvmArgs.trim()) log("INFO", "launcher", `Custom JVM args: ${s.jvmArgs.trim()}`);
-  log("INFO", "launcher", "Checking modpack manifest...");
-
-  after(900, () => {
-    // --- downloading -------------------------------------------------------
-    state.progress.stage = "downloading";
-    state.progress.step = "Downloading files";
-    let done = 0;
-    const tickMs = 90;
-    every(tickMs, () => {
-      // advance 1–3 files per tick
-      done = Math.min(MOCK_FILES.length, done + 1 + Math.floor(Math.random() * 3));
-      const p = state.progress;
-      p.filesDone = done;
-      p.file = MOCK_FILES[done - 1] ?? "";
-      p.percent = Math.round((done / MOCK_FILES.length) * 100);
-      p.bytesPerSec = (7 + Math.random() * 8) * 1024 * 1024;
-      p.etaSec = Math.max(0, Math.ceil(((MOCK_FILES.length - done) / MOCK_FILES.length) * 9));
-      if (done >= MOCK_FILES.length) {
-        log("INFO", "launcher", `Downloaded ${MOCK_FILES.length} files`);
-        after(400, startVerify);
-        return false;
-      }
-    });
   });
-}
-
-function startVerify() {
-  state.progress = {
-    ...state.progress,
-    stage: "verifying",
-    step: "Verifying integrity",
-    file: "",
-    percent: 100,
-    bytesPerSec: 0,
-    etaSec: 1,
-  };
-  log("INFO", "launcher", "Verifying file checksums...");
-  after(1100, () => {
-    state.progress = {
+  try {
+    await invoke("play", { quickPlay });
+  } catch (e) {
+    const message = errorMessage(e);
+    log("ERROR", "launcher", message);
+    applyProgress({
       ...state.progress,
-      stage: "launching",
-      step: "Launching game",
-      etaSec: 0,
-    };
-    const s = state.settings;
-    log("INFO", "launcher", `java -Xmx${s.ramGb}G -Xms${Math.min(s.ramGb, 2)}G ${s.jvmArgs.trim()} -jar fabric-loader.jar`);
-    after(1400, startGame);
-  });
+      stage: "error",
+      step: "Launch failed",
+      file: message,
+    });
+  }
 }
 
-function startGame() {
-  state.progress = { ...state.progress, stage: "running", step: "Game running" };
-  const rnd = mulberry32(Date.now());
-  every(350 + rnd() * 500, () => {
-    const [level, source, message] = GAME_LOG_POOL[Math.floor(rnd() * GAME_LOG_POOL.length)];
-    log(level, source, message.replace("%u", activeAccount.value?.username ?? "player"));
-  });
-}
-
-/** cancel — abort an in-progress launch. */
-function cancel() {
+async function cancel() {
   if (!busy.value) return;
-  clearTimers();
-  state.progress = {
-    stage: "idle",
-    step: "",
-    file: "",
-    filesDone: 0,
-    filesTotal: 0,
-    percent: 0,
-    bytesPerSec: 0,
-    etaSec: 0,
-  };
-  log("WARN", "launcher", "Launch cancelled");
+  try {
+    await invoke("cancel");
+    applyProgress({
+      ...state.progress,
+      stage: "error",
+      step: "Cancelled",
+      file: "Launch cancelled",
+      bytesPerSec: 0,
+      etaSec: 0,
+    });
+    log("WARN", "launcher", "Launch cancelled");
+  } catch (e) {
+    log("ERROR", "launcher", String(e));
+  }
 }
 
-/** stop — quit the running game. */
-function stop() {
+async function stop() {
   if (state.progress.stage !== "running") return;
-  clearTimers();
-  state.progress.stage = "idle";
-  state.progress.step = "";
-  log("INFO", "launcher", "Game closed");
+  try {
+    await invoke("stop");
+    applyProgress({ ...IDLE_PROGRESS });
+    log("INFO", "launcher", "Game closed");
+  } catch (e) {
+    log("ERROR", "launcher", String(e));
+  }
 }
 
 function setView(view: View) {
@@ -402,6 +466,8 @@ export const launcher = {
   state,
   activeAccount,
   busy,
+  loginLogs,
+  loginStatus,
   login,
   removeAccount,
   setActiveAccount,
