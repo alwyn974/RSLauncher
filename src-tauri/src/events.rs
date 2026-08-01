@@ -112,6 +112,22 @@ pub fn spawn_bridge(app: AppHandle, bus: EventBus, launch_state: Arc<LaunchState
                         ),
                     );
                     emit_log("INFO", "launcher", "Install completed");
+                    // Re-write after modpack overrides — they can clobber an
+                    // early servers.dat written before install.
+                    if let Ok(settings) = crate::settings::load() {
+                        let instance = crate::modpack::build_instance();
+                        if let Err(err) = crate::servers::ensure_default_server(
+                            instance.game_dirs(),
+                            &settings.server_name,
+                            &settings.server_address,
+                        ) {
+                            emit_log(
+                                "WARN",
+                                "launcher",
+                                format!("Could not refresh servers.dat: {err}"),
+                            );
+                        }
+                    }
                     // Lighty no longer emits LaunchEvent::Launching; nudge the
                     // pipeline forward so we don't sit on Download/Extract.
                     emit_progress(

@@ -1,14 +1,13 @@
 //! Ensure a default multiplayer server exists in the instance `servers.dat`.
 //!
-//! Format: gzip-compressed NBT compound with a `servers` list (vanilla Minecraft).
+//! Modern Minecraft (1.21+) writes **uncompressed** NBT. Older builds used
+//! gzip — we read both, and always write uncompressed to match vanilla.
 
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Read;
 use std::path::Path;
 
 use flate2::read::GzDecoder;
-use flate2::write::GzEncoder;
-use flate2::Compression;
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppError;
@@ -23,10 +22,25 @@ struct ServersRoot {
 struct ServerEntry {
     name: String,
     ip: String,
+    #[serde(default)]
+    hidden: bool,
+    /// NeoForge / modern vanilla (chat reporting toggle).
+    #[serde(rename = "preventsChatReports", default)]
+    prevents_chat_reports: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     icon: Option<String>,
-    #[serde(rename = "acceptTextures", default, skip_serializing_if = "Option::is_none")]
-    accept_textures: Option<i8>,
+}
+
+impl ServerEntry {
+    fn new(name: String, ip: String) -> Self {
+        Self {
+            name,
+            ip,
+            hidden: false,
+            prevents_chat_reports: false,
+            icon: None,
+        }
+    }
 }
 
 /// Upsert the given server into `{game_dir}/servers.dat`.
@@ -59,40 +73,39 @@ pub fn ensure_default_server(
 
     if let Some(entry) = root.servers.iter_mut().find(|s| s.ip == address) {
         entry.name = display_name;
+        entry.hidden = false;
     } else {
-        root.servers.insert(
-            0,
-            ServerEntry {
-                name: display_name,
-                ip: address.to_string(),
-                icon: None,
-                accept_textures: Some(1),
-            },
-        );
+        root.servers.insert(0, ServerEntry::new(display_name, address.to_string()));
     }
 
-    write_servers(&path, &root)
+    write_servers(&path, &root)?;
+    log::info!(
+        target: "rslauncher",
+        "[launcher] servers.dat ready at {} ({} entries)",
+        path.display(),
+        root.servers.len()
+    );
+    Ok(())
 }
 
 fn read_servers(path: &Path) -> Result<ServersRoot, AppError> {
     let bytes = fs::read(path)?;
-    let mut decoder = GzDecoder::new(bytes.as_slice());
-    let mut inflated = Vec::new();
-    decoder
-        .read_to_end(&mut inflated)
-        .map_err(|e| AppError::msg(format!("servers.dat gunzip: {e}")))?;
-    fastnbt::from_bytes(&inflated).map_err(|e| AppError::msg(format!("servers.dat nbt: {e}")))
+    let nbt = if bytes.starts_with(&[0x1f, 0x8b]) {
+        let mut decoder = GzDecoder::new(bytes.as_slice());
+        let mut inflated = Vec::new();
+        decoder
+            .read_to_end(&mut inflated)
+            .map_err(|e| AppError::msg(format!("servers.dat gunzip: {e}")))?;
+        inflated
+    } else {
+        bytes
+    };
+    fastnbt::from_bytes(&nbt).map_err(|e| AppError::msg(format!("servers.dat nbt: {e}")))
 }
 
 fn write_servers(path: &Path, root: &ServersRoot) -> Result<(), AppError> {
+    // Vanilla 1.21 writes uncompressed NBT (not gzip).
     let nbt = fastnbt::to_bytes(root).map_err(|e| AppError::msg(format!("servers.dat nbt: {e}")))?;
-    let mut encoder = GzEncoder::new(Vec::new(), Compression::default());
-    encoder
-        .write_all(&nbt)
-        .map_err(|e| AppError::msg(format!("servers.dat gzip: {e}")))?;
-    let gz = encoder
-        .finish()
-        .map_err(|e| AppError::msg(format!("servers.dat gzip finish: {e}")))?;
-    fs::write(path, gz)?;
+    fs::write(path, nbt)?;
     Ok(())
 }
