@@ -112,6 +112,17 @@ pub fn spawn_bridge(app: AppHandle, bus: EventBus, launch_state: Arc<LaunchState
                         ),
                     );
                     emit_log("INFO", "launcher", "Install completed");
+                    // Lighty no longer emits LaunchEvent::Launching; nudge the
+                    // pipeline forward so we don't sit on Download/Extract.
+                    emit_progress(
+                        &app,
+                        Progress::detail(
+                            "launching",
+                            "Starting game",
+                            "Handing off to the JVM…",
+                            94,
+                        ),
+                    );
                 }
                 Event::Launch(LaunchEvent::Launching { version }) => {
                     emit_progress(
@@ -174,10 +185,32 @@ pub fn spawn_bridge(app: AppHandle, bus: EventBus, launch_state: Arc<LaunchState
                 Event::Loader(e) => handle_loader(&app, e),
                 Event::Core(e) => handle_core(&app, e),
                 Event::InstanceLaunched(e) => {
+                    // Lighty 26.x emits InstanceLaunched (not LaunchEvent::Launched).
+                    launch_state.set_pid(Some(e.pid));
+                    if launch_state.is_cancelled() {
+                        let instance = crate::modpack::build_instance();
+                        let _ = instance.close_instance(e.pid).await;
+                        launch_state.set_pid(None);
+                        emit_progress(&app, Progress::idle());
+                        emit_log("WARN", "launcher", "Launch cancelled");
+                        continue;
+                    }
+                    emit_progress(
+                        &app,
+                        Progress::detail(
+                            "running",
+                            "Game running",
+                            format!("{} · pid {}", e.version, e.pid),
+                            100,
+                        ),
+                    );
                     emit_log(
                         "INFO",
                         "launcher",
-                        format!("Instance launched (pid {})", e.pid),
+                        format!(
+                            "Instance '{}' launched (pid {})",
+                            e.instance_name, e.pid
+                        ),
                     );
                 }
                 Event::InstanceExited(e) => {

@@ -166,9 +166,30 @@ function isPipelineStage(stage: string): stage is LaunchStage {
   return LAUNCH_STEPS.some((s) => s.id === stage);
 }
 
+function stageRank(stage: LaunchStage): number {
+  if (stage === "idle") return -1;
+  if (stage === "error") return 1000;
+  const i = LAUNCH_STEPS.findIndex((s) => s.id === stage);
+  return i >= 0 ? i : -1;
+}
+
 function applyProgress(next: Progress) {
   const stage = (next.stage as LaunchStage) || "idle";
-  if (isPipelineStage(stage) && stage !== "error") {
+  const current = state.progress.stage;
+
+  // Ignore late install/extract events once we've moved past them
+  // (Lighty can still emit InstallProgress after the JVM is up).
+  if (
+    stage !== "idle" &&
+    stage !== "error" &&
+    isPipelineStage(stage) &&
+    isPipelineStage(current) &&
+    stageRank(stage) < stageRank(current)
+  ) {
+    return;
+  }
+
+  if (isPipelineStage(stage)) {
     state.progressPhase = stage;
   }
   state.progress = { ...IDLE_PROGRESS, ...next, stage };
