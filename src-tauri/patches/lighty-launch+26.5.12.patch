@@ -1,5 +1,5 @@
 --- a/src/installer/ressources/modpack/curseforge.rs
-+++ lighty-launch-26.5.12/src/installer/ressources/modpack/curseforge.rs	2026-08-01 21:04:20.229766817 +0400
++++ b/src/installer/ressources/modpack/curseforge.rs
 @@ -11,6 +11,7 @@
  use lighty_core::QueryError;
  use lighty_loaders::types::version_metadata::Mods;
@@ -25,8 +25,306 @@
                  let sha1 = resolved
                      .hashes
                      .iter()
+--- a/src/installer/ressources/modpack/pipeline.rs
++++ b/src/installer/ressources/modpack/pipeline.rs
+@@ -22,8 +22,10 @@
+ /// Runs the modpack pipeline for `source` and returns the `Vec<Mods>`
+ /// to merge into the version pivot before install.
+ ///
+-/// Returns `Ok(vec![])` when the marker already matches (idempotent
+-/// re-run — nothing to do).
++/// When a previous run already resolved this pack, returns the **cached
++/// mod list** so the installer can still verify / re-download missing or
++/// corrupt files. Returning an empty vec here used to skip verification
++/// entirely and launch with incomplete packs on flaky networks.
+ pub(crate) async fn process<V>(
+     source: &ModpackSource,
+     version: &V,
+@@ -50,16 +52,35 @@
+     tokio::fs::create_dir_all(&cache_dir).await?;
+     let archive_path = cache_dir.join(format!("{url_sha1}.archive"));
+     let marker_path = cache_dir.join(format!("{url_sha1}.installed"));
++    let mods_cache_path = cache_dir.join(format!("{url_sha1}.mods.json"));
+     let work_dir = cache_dir.join(format!("work-{url_sha1}"));
+ 
+-    // Idempotence: marker file matches the URL hash means we're done.
++    // Fast path: reuse the resolved mod list so install can verify files
++    // without re-hitting CurseForge/Modrinth for every entry.
+     if marker_path.exists() {
+         if let Ok(saved) = tokio::fs::read_to_string(&marker_path).await {
+             if saved.trim() == url_sha1 {
+-                lighty_core::trace_info!(
+-                    "[Modpack] Already installed (marker matches), skipping"
++                if let Ok(bytes) = tokio::fs::read(&mods_cache_path).await {
++                    if let Ok(mods) = serde_json::from_slice::<Vec<Mods>>(&bytes) {
++                        if !mods.is_empty() {
++                            lighty_core::trace_info!(
++                                "[Modpack] Cached mod list ({} entries) — install will verify",
++                                mods.len()
++                            );
++                            #[cfg(feature = "events")]
++                            if let Some(bus) = event_bus {
++                                bus.emit(Event::Modloader(ModloaderEvent::ModpackInstalled {
++                                    name: source_desc.clone(),
++                                    mods_count: mods.len(),
++                                }));
++                            }
++                            return Ok(mods);
++                        }
++                    }
++                }
++                lighty_core::trace_warn!(
++                    "[Modpack] Marker present but mod list cache missing/empty — rebuilding"
+                 );
+-                return Ok(Vec::new());
+             }
+         }
+     }
+@@ -98,6 +119,14 @@
+         }));
+     };
+ 
++    // Persist the resolved list BEFORE the marker so a crash between the
++    // two never leaves us with "installed" + empty verification list.
++    let mods_json = serde_json::to_vec(&mods).map_err(|e| {
++        InstallerError::Query(QueryError::Conversion {
++            message: format!("serialize mod list: {e}"),
++        })
++    })?;
++    tokio::fs::write(&mods_cache_path, &mods_json).await?;
+     tokio::fs::write(&marker_path, &url_sha1).await?;
+ 
+     if work_dir.exists() {
+--- a/src/installer/verifier.rs
++++ b/src/installer/verifier.rs
+@@ -12,18 +12,40 @@
+ 
+ /// Returns whether the file at `path` needs to be (re-)downloaded.
+ ///
+-/// `true` when missing, zero-byte, or the SHA1 doesn't match.
+-pub async fn needs_download(path: &PathBuf, sha1: Option<&String>, name: &str) -> bool {
++/// `true` when missing, zero-byte, size mismatch, or the SHA1 doesn't match.
++pub async fn needs_download(
++    path: &PathBuf,
++    sha1: Option<&String>,
++    expected_size: Option<u64>,
++    name: &str,
++) -> bool {
+     if !path.exists() {
+         return true;
+     }
+ 
++    let Ok(meta) = fs::metadata(path).await else {
++        return true;
++    };
++
+     // Zero-byte files are stale artifacts of failed downloads.
+-    if let Ok(meta) = fs::metadata(path).await {
+-        if meta.len() == 0 {
++    if meta.len() == 0 {
++        lighty_core::trace_warn!(
++            "[Installer] Zero-byte cached file for {}, re-downloading...",
++            name
++        );
++        let _ = fs::remove_file(path).await;
++        return true;
++    }
++
++    // Truncated downloads on flaky networks often leave a non-zero but
++    // incomplete file. Catch those even when SHA1 is unavailable.
++    if let Some(expected) = expected_size {
++        if meta.len() != expected {
+             lighty_core::trace_warn!(
+-                "[Installer] Zero-byte cached file for {}, re-downloading...",
+-                name
++                "[Installer] Size mismatch for {} (got {}, expected {}), re-downloading...",
++                name,
++                meta.len(),
++                expected
+             );
+             let _ = fs::remove_file(path).await;
+             return true;
+--- a/src/installer/downloader.rs
++++ b/src/installer/downloader.rs
+@@ -70,7 +70,27 @@
+     dest: &PathBuf,
+     #[cfg(feature = "events")] event_bus: Option<&EventBus>,
+ ) -> InstallerResult<()> {
+-    let bytes = CLIENT.get(url).send().await?.bytes().await?;
++    let response = CLIENT.get(url).send().await?;
++    if !response.status().is_success() {
++        return Err(InstallerError::DownloadFailed(format!(
++            "HTTP {} for {}",
++            response.status(),
++            url
++        )));
++    }
++    let expected = response.content_length();
++    let bytes = response.bytes().await?;
++
++    if let Some(expected) = expected {
++        if bytes.len() as u64 != expected {
++            return Err(InstallerError::DownloadFailed(format!(
++                "Truncated download for {} (got {} bytes, Content-Length {})",
++                url,
++                bytes.len(),
++                expected
++            )));
++        }
++    }
+ 
+     #[cfg(feature = "events")]
+     if let Some(bus) = event_bus {
+@@ -144,27 +164,60 @@
+         )));
+     }
+ 
++    let expected = response.content_length();
++
+     if let Some(parent) = dest.parent() {
+         mkdir!(parent);
+     }
+ 
+-    let file = fs::File::create(dest).await?;
++    // Write to a temp sibling first so a dropped connection never leaves a
++    // "complete-looking" partial file at the final path.
++    let tmp = dest.with_extension("download.tmp");
++    let _ = fs::remove_file(&tmp).await;
++
++    let file = fs::File::create(&tmp).await?;
+     let mut writer = BufWriter::with_capacity(256 * 1024, file);
+     let mut stream = response.bytes_stream();
++    let mut written = 0u64;
++
++    let write_result: InstallerResult<()> = async {
++        while let Some(chunk) = stream.next().await {
++            let chunk = chunk?;
++            written += chunk.len() as u64;
++            writer.write_all(&chunk).await?;
++
++            #[cfg(feature = "events")]
++            if let Some(bus) = event_bus {
++                bus.emit(Event::Launch(LaunchEvent::InstallProgress {
++                    bytes: chunk.len() as u64,
++                }));
++            }
++        }
++        writer.flush().await?;
++        Ok(())
++    }
++    .await;
+ 
+-    while let Some(chunk) = stream.next().await {
+-        let chunk = chunk?;
+-        writer.write_all(&chunk).await?;
+-
+-        #[cfg(feature = "events")]
+-        if let Some(bus) = event_bus {
+-            bus.emit(Event::Launch(LaunchEvent::InstallProgress {
+-                bytes: chunk.len() as u64,
+-            }));
++    if let Err(e) = write_result {
++        let _ = fs::remove_file(&tmp).await;
++        return Err(e);
++    }
++
++    if let Some(expected) = expected {
++        if written != expected {
++            let _ = fs::remove_file(&tmp).await;
++            return Err(InstallerError::DownloadFailed(format!(
++                "Truncated download for {url} (got {written} bytes, Content-Length {expected})"
++            )));
+         }
+     }
+ 
+-    writer.flush().await?;
++    fs::rename(&tmp, dest).await.map_err(|e| {
++        let _ = std::fs::remove_file(&tmp);
++        InstallerError::DownloadFailed(format!(
++            "Failed to finalize download for {url}: {e}"
++        ))
++    })?;
+     Ok(())
+ }
+ 
+--- a/src/installer/ressources/asset_partition.rs
++++ b/src/installer/ressources/asset_partition.rs
+@@ -64,7 +64,14 @@
+             lighty_core::mkdir!(dir);
+         }
+ 
+-        if needs_download(&target, entry.sha1.as_ref(), &entry.name).await {
++        if needs_download(
++            &target,
++            entry.sha1.as_ref(),
++            entry.size,
++            &entry.name,
++        )
++        .await
++        {
+             bytes += entry.size.unwrap_or(0);
+             tasks.push((url.clone(), target));
+         }
+--- a/src/installer/ressources/libraries.rs
++++ b/src/installer/ressources/libraries.rs
+@@ -32,7 +32,7 @@
+ 
+         let path = parent_path.join(path_str);
+ 
+-        if needs_download(&path, lib.sha1.as_ref(), &lib.name).await {
++        if needs_download(&path, lib.sha1.as_ref(), lib.size, &lib.name).await {
+             tasks.push((url.clone(), path));
+         }
+     }
+--- a/src/installer/ressources/natives.rs
++++ b/src/installer/ressources/natives.rs
+@@ -38,7 +38,7 @@
+ 
+         let jar_path = libraries_path.join(path_str);
+ 
+-        if needs_download(&jar_path, native.sha1.as_ref(), &native.name).await {
++        if needs_download(&jar_path, native.sha1.as_ref(), native.size, &native.name).await {
+             download_tasks.push((url.clone(), jar_path.clone()));
+         }
+ 
+--- a/src/installer/ressources/client.rs
++++ b/src/installer/ressources/client.rs
+@@ -21,7 +21,14 @@
+     let url = client.url.as_ref()?.clone();
+     let client_path = version.game_dirs().join(format!("{}.jar", version.name()));
+ 
+-    if needs_download(&client_path, client.sha1.as_ref(), "Client JAR").await {
++    if needs_download(
++        &client_path,
++        client.sha1.as_ref(),
++        client.size,
++        "Client JAR",
++    )
++    .await
++    {
+         Some((url, client_path))
+     } else {
+         None
+--- a/src/installer/ressources/assets.rs
++++ b/src/installer/ressources/assets.rs
+@@ -36,7 +36,14 @@
+             }
+         };
+ 
+-        if needs_download(&path, Some(&asset.hash), &asset.hash).await {
++        if needs_download(
++            &path,
++            Some(&asset.hash),
++            Some(asset.size),
++            &asset.hash,
++        )
++        .await
++        {
+             tasks.push((url.clone(), path));
+         }
+     }
 --- a/src/installer/processors/processor.rs
-+++ lighty-launch-26.5.12/src/installer/processors/processor.rs	2026-08-01 23:08:34.674315683 +0400
++++ b/src/installer/processors/processor.rs
 @@ -436,17 +436,29 @@
          "Processor configuration prepared"
      );
@@ -64,7 +362,7 @@
      if !output.status.success() {
          let stderr = String::from_utf8_lossy(&output.stderr);
 --- a/src/instance/manager.rs
-+++ lighty-launch-26.5.12/src/instance/manager.rs	2026-08-01 23:08:36.020328943 +0400
++++ b/src/instance/manager.rs
 @@ -119,9 +119,12 @@
          // terminate the process tree.
          #[cfg(target_os = "windows")]

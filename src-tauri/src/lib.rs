@@ -76,6 +76,13 @@ fn clamp_main_window_size(app: &tauri::App) -> tauri::Result<()> {
 pub fn run() {
     AppState::init(config::LAUNCHER_NAME).expect("failed to init Lighty AppState");
 
+    // Flaky connections: fewer parallel streams, more retries, longer backoff.
+    init_downloader_config(DownloaderConfig {
+        max_concurrent_downloads: 16,
+        max_retries: 8,
+        initial_delay_ms: 250,
+    });
+
     if let Some(key) = config::curseforge_api_key() {
         curseforge::set_api_key(key);
     }

@@ -22,3 +22,7 @@ dist-ssr
 *.sln
 *.sw?
 .pw-browsers/
+
+# Never commit bake-in secret files if created at repo root
+/curseforge_api_key
+/azure_client_id
