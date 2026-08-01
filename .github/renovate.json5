@@ -1,0 +1,31 @@
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: [
+    // https://docs.renovatebot.com/presets-config/#configbest-practices
+    'config:best-practices',
+    ':semanticCommitTypeAll(build)',
+    ':docker',
+  ],
+  useBaseBranchConfig: 'merge',
+  baseBranchPatterns: [
+    '$default',
+  ],
+  major: {
+    dependencyDashboardApproval: true,
+  },
+  dependencyDashboardApproval: false,
+  dependencyDashboardLabels: [
+    '📌 dependencies',
+  ],
+  labels: [
+    '📌 dependencies',
+  ],
+  semanticCommits: 'enabled',
+  packageRules: [
+    {
+      matchUpdateTypes: ["minor", "patch"],
+      matchCurrentVersion: "!/^0/",
+      automerge: true
+    }
+  ]
+}

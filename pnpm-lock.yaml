@@ -35,6 +35,9 @@ importers:
       '@tauri-apps/plugin-positioner':
         specifier: 2.3.3
         version: 2.3.3
+      '@tauri-apps/plugin-process':
+        specifier: 2.3.1
+        version: 2.3.1
       '@tauri-apps/plugin-updater':
         specifier: 2.10.1
         version: 2.10.1
@@ -589,6 +592,9 @@ packages:
 
   '@tauri-apps/plugin-positioner@2.3.3':
     resolution: {integrity: sha512-FOUOpd3qIN1dO+G8TZsFH4Orhu02GhGUSRL2AdQBYyzJ/Kr+J5AFxwo0ANLy3tRoAu7kc18APwJZ+/jeWANfvA==}
+
+  '@tauri-apps/plugin-process@2.3.1':
+    resolution: {integrity: sha512-nCa4fGVaDL/B9ai03VyPOjfAHRHSBz5v6F/ObsB73r/dA3MHHhZtldaDMIc0V/pnUw9ehzr2iEG+XkSEyC0JJA==}
 
   '@tauri-apps/plugin-updater@2.10.1':
     resolution: {integrity: sha512-NFYMg+tWOZPJdzE/PpFj2qfqwAWwNS3kXrb1tm1gnBJ9mYzZ4WDRrwy8udzWoAnfGCHLuePNLY1WVCNHnh3eRA==}
@@ -1291,6 +1297,10 @@ snapshots:
       '@tauri-apps/api': 2.11.1
 
   '@tauri-apps/plugin-positioner@2.3.3':
+    dependencies:
+      '@tauri-apps/api': 2.11.1
+
+  '@tauri-apps/plugin-process@2.3.1':
     dependencies:
       '@tauri-apps/api': 2.11.1
 
