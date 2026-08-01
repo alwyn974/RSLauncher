@@ -1,5 +1,5 @@
 --- a/src/installer/ressources/modpack/curseforge.rs
-+++ b/src/installer/ressources/modpack/curseforge.rs
++++ lighty-launch-26.5.12/src/installer/ressources/modpack/curseforge.rs	2026-08-01 21:04:20.229766817 +0400
 @@ -11,6 +11,7 @@
  use lighty_core::QueryError;
  use lighty_loaders::types::version_metadata::Mods;
@@ -25,3 +25,57 @@
                  let sha1 = resolved
                      .hashes
                      .iter()
+--- a/src/installer/processors/processor.rs
++++ lighty-launch-26.5.12/src/installer/processors/processor.rs	2026-08-01 23:08:34.674315683 +0400
+@@ -436,17 +436,29 @@
+         "Processor configuration prepared"
+     );
+ 
+-    let output = tokio::process::Command::new(&context.java_path)
++    // NeoForge/Forge run many short-lived `java.exe` processors here.
++    // Without CREATE_NO_WINDOW each one flashes a console on Windows.
++    let mut processor_cmd = tokio::process::Command::new(&context.java_path);
++    processor_cmd
+         .arg("-cp")
+         .arg(&classpath)
+         .arg(&main_class)
+         .args(&processed_args)
+         .current_dir(&context.game_dir)
+-        .output()
+-        .await
+-        .map_err(|e| QueryError::Conversion {
+-            message: format!("Failed to execute processor: {}", e),
+-        })?;
++        .stdin(std::process::Stdio::null())
++        .stdout(std::process::Stdio::piped())
++        .stderr(std::process::Stdio::piped());
++
++    #[cfg(windows)]
++    {
++        use std::os::windows::process::CommandExt;
++        const CREATE_NO_WINDOW: u32 = 0x08000000;
++        processor_cmd.creation_flags(CREATE_NO_WINDOW);
++    }
++
++    let output = processor_cmd.output().await.map_err(|e| QueryError::Conversion {
++        message: format!("Failed to execute processor: {}", e),
++    })?;
+ 
+     if !output.status.success() {
+         let stderr = String::from_utf8_lossy(&output.stderr);
+--- a/src/instance/manager.rs
++++ lighty-launch-26.5.12/src/instance/manager.rs	2026-08-01 23:08:36.020328943 +0400
+@@ -119,9 +119,12 @@
+         // terminate the process tree.
+         #[cfg(target_os = "windows")]
+         {
++            use std::os::windows::process::CommandExt;
+             use std::process::Command;
++            const CREATE_NO_WINDOW: u32 = 0x08000000;
+             let output = Command::new("taskkill")
+-                .args(&["/PID", &pid.to_string(), "/F"])
++                .args(["/PID", &pid.to_string(), "/F"])
++                .creation_flags(CREATE_NO_WINDOW)
+                 .output()?;
+ 
+             if !output.status.success() {
