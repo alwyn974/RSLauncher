@@ -9,3 +9,6 @@
 # Local secrets (baked into the binary by build.rs — never commit)
 /curseforge_api_key
 /azure_client_id
+
+# Materialized crate patches (from patches/*.patch via scripts/apply-patches.sh)
+/patched/

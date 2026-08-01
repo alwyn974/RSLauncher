@@ -1,0 +1,107 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -39,6 +39,14 @@
+ events = ["dep:lighty-event"]
+ modrinth = []
+ tracing = ["dep:tracing"]
++# Declared for `instance_cache` cfg checks (features live on lighty-loaders /
++# the root crate; this silences rustc unexpected_cfgs).
++vanilla = []
++fabric = []
++quilt = []
++forge = []
++neoforge = []
++lighty_updater = []
+ 
+ [lib]
+ name = "lighty_modsloader"
+--- a/src/curseforge/api.rs
++++ b/src/curseforge/api.rs
+@@ -36,6 +36,40 @@
+     })
+ }
+ 
++
++/// CDN fallback when CurseForge returns `downloadUrl: null` (third-party
++/// distribution disabled). Same construction as FlowUpdater:
++/// `https://edge.forgecdn.net/files/{fileId[0..4]}/{fileId[4..]}/{fileName}`
++///
++/// See <https://github.com/FlowArg/FlowUpdater/blob/master/src/main/java/fr/flowarg/flowupdater/integrations/curseforgeintegration/CurseForgeIntegration.java#L125>
++pub fn forgecdn_download_url(file_id: u32, file_name: &str) -> String {
++    let id = file_id.to_string();
++    let (prefix, suffix) = if id.len() >= 4 {
++        (&id[..4], &id[4..])
++    } else {
++        (id.as_str(), "")
++    };
++    let name = file_name.replace(' ', "%20");
++    format!("https://edge.forgecdn.net/files/{prefix}/{suffix}/{name}")
++}
++
++/// Prefer the API `downloadUrl`, else the ForgeCDN fallback above.
++pub fn resolve_file_download_url(file_id: u32, file_name: &str, download_url: Option<&str>) -> String {
++    match download_url {
++        Some(url) if !url.is_empty() => url.to_string(),
++        _ => {
++            let fallback = forgecdn_download_url(file_id, file_name);
++            lighty_core::trace_warn!(
++                file_id,
++                file_name,
++                %fallback,
++                "CurseForge downloadUrl missing - using ForgeCDN fallback"
++            );
++            fallback
++        }
++    }
++}
++
+ /// Minimal RFC3986 URL-encoder.
+ pub fn url_encode(input: &str) -> String {
+     let mut out = String::with_capacity(input.len() + 8);
+--- a/src/curseforge/client.rs
++++ b/src/curseforge/client.rs
+@@ -171,12 +171,11 @@
+ /// `subdir` is the runtime-relative folder picked from the project's
+ /// `classId` (`"mods"`, `"resourcepacks"`, `"shaderpacks"`).
+ fn into_pivot(file: &CurseForgeFile, subdir: &str) -> Result<Mods, QueryError> {
+-    let url = file
+-        .download_url
+-        .clone()
+-        .ok_or_else(|| QueryError::ModDistributionForbidden {
+-            id: file.mod_id.to_string(),
+-        })?;
++    let url = super::api::resolve_file_download_url(
++        file.id,
++        &file.file_name,
++        file.download_url.as_deref(),
++    );
+     let sha1 = file
+         .hashes
+         .iter()
+--- a/src/curseforge/modpack.rs
++++ b/src/curseforge/modpack.rs
+@@ -17,10 +17,11 @@
+     match source {
+         ModpackSource::CurseForgePinned { project_id, file_id } => {
+             let file = fetch_pinned_file(*project_id, *file_id).await?;
+-            file.download_url
+-                .ok_or_else(|| QueryError::ModDistributionForbidden {
+-                    id: format!("{project_id}/{file_id}"),
+-                })
++            Ok(super::api::resolve_file_download_url(
++                file.id,
++                &file.file_name,
++                file.download_url.as_deref(),
++            ))
+         }
+         _ => Err(QueryError::Conversion {
+             message: "resolve_cf_modpack_url called with a non-CurseForge source".into(),
+--- a/src/curseforge/mod.rs
++++ b/src/curseforge/mod.rs
+@@ -9,5 +9,5 @@
+ pub mod modpack;
+ pub mod modpack_metadata;
+ 
+-pub use api::set_api_key;
++pub use api::{forgecdn_download_url, resolve_file_download_url, set_api_key};
+ pub use client::{fetch, fetch_pinned_file, CurseForgeKey, CURSEFORGE_CACHE};

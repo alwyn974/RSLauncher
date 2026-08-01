@@ -76,14 +76,14 @@ fn write_cache(mb: u32) -> Result<(), String> {
 }
 
 fn forgecdn_url() -> String {
-    let id = config::ATM10_FILE_ID;
+    let id = config::ATM10_FILE_ID.to_string();
+    let (prefix, suffix) = if id.len() >= 4 {
+        (&id[..4], &id[4..])
+    } else {
+        (id.as_str(), "")
+    };
     let name = config::ATM10_FILE_NAME.replace(' ', "%20");
-    format!(
-        "https://edge.forgecdn.net/files/{}/{}/{}",
-        id / 1000,
-        id % 1000,
-        name
-    )
+    format!("https://edge.forgecdn.net/files/{prefix}/{suffix}/{name}")
 }
 
 fn parse_recommended_mb_from_zip(bytes: &[u8]) -> Result<u32, String> {

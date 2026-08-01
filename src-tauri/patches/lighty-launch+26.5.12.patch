@@ -1,0 +1,27 @@
+--- a/src/installer/ressources/modpack/curseforge.rs
++++ b/src/installer/ressources/modpack/curseforge.rs
+@@ -11,6 +11,7 @@
+ use lighty_core::QueryError;
+ use lighty_loaders::types::version_metadata::Mods;
+ use lighty_loaders::types::VersionInfo;
++use lighty_modsloader::curseforge::api::resolve_file_download_url;
+ use lighty_modsloader::curseforge::client::{fetch_pinned_file, install_subdir_for};
+ use lighty_modsloader::curseforge::client_metadata::HASH_ALGO_SHA1;
+ use lighty_modsloader::curseforge::modpack::parse_manifest;
+@@ -53,11 +54,11 @@
+                     fetch_pinned_file(cf_file.project_id, cf_file.file_id),
+                     install_subdir_for(cf_file.project_id, ttl),
+                 )?;
+-                let url = resolved.download_url.ok_or_else(|| {
+-                    InstallerError::Query(QueryError::ModDistributionForbidden {
+-                        id: format!("{}/{}", cf_file.project_id, cf_file.file_id),
+-                    })
+-                })?;
++                let url = resolve_file_download_url(
++                    resolved.id,
++                    &resolved.file_name,
++                    resolved.download_url.as_deref(),
++                );
+                 let sha1 = resolved
+                     .hashes
+                     .iter()

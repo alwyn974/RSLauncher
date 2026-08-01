@@ -82,11 +82,6 @@ impl Progress {
         }
     }
 
-    /// Stage + label, with a coarse pipeline percent when not downloading.
-    pub fn stage(stage: &str, step: &str) -> Self {
-        Self::detail(stage, step, "", phase_percent(stage))
-    }
-
     pub fn detail(stage: &str, step: &str, detail: impl Into<String>, percent: u32) -> Self {
         Self {
             stage: stage.into(),
@@ -111,19 +106,6 @@ impl Progress {
             bytes_per_sec: 0.0,
             eta_sec: 0,
         }
-    }
-}
-
-fn phase_percent(stage: &str) -> u32 {
-    match stage {
-        "preparing" => 8,
-        "java" => 18,
-        "loader" => 28,
-        "downloading" => 40,
-        "verifying" => 82,
-        "launching" => 94,
-        "running" => 100,
-        _ => 0,
     }
 }
 
