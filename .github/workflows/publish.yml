@@ -100,7 +100,12 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
+          # Stable across jobs/tags — restore from caches saved on `main`
+          # (see cache.yml). Tag-scoped saves are useless to other tags.
+          shared-key: rslauncher-windows
           workspaces: "./src-tauri -> target"
+          cache-all-crates: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Install frontend dependencies
         run: pnpm install

@@ -1,0 +1,64 @@
+# Populate GitHub Actions caches on `main` so tag/publish runs can restore them.
+# Caches created on tags are NOT visible to other tags — only default-branch
+# caches are (GitHub scoping). Keep `shared-key` in sync with publish.yml.
+name: Cache
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src-tauri/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/cache.yml"
+      - ".github/workflows/publish.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: cache-main
+  cancel-in-progress: true
+
+jobs:
+  warm-windows:
+    runs-on: windows-latest
+    env:
+      node-version: 26.x
+      CURSEFORGE_API_KEY: ${{ secrets.CURSEFORGE_API_KEY }}
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      # Needed so `tauri build` can produce updater artifacts like publish does.
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2 # ratchet:pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - name: Setup Node.js ${{ env.node-version }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.node-version }}
+          cache: "pnpm"
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          # Must match publish.yml exactly.
+          shared-key: rslauncher-windows
+          workspaces: "./src-tauri -> target"
+          cache-all-crates: true
+          cache-on-failure: true
+
+      - name: Install frontend dependencies
+        run: pnpm install
+
+      - name: Release build (warm compile cache)
+        # Full tauri build matches publish compile units better than cargo check.
+        # No GitHub release — cache only.
+        run: pnpm tauri build
