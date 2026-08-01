@@ -3,24 +3,28 @@
  * Full-window gate for mandatory launcher updates — no dismiss.
  */
 import { computed } from "vue";
-import { retryForcedUpdate, updatePercent, updateState } from "../updater";
+import {
+  retryForcedUpdate,
+  updateFromToLabel,
+  updatePercent,
+  updateState,
+  updateVersionLabel,
+} from "../updater";
 import PixelButton from "./PixelButton.vue";
 
 const title = computed(() => {
   switch (updateState.phase) {
-    case "checking":
-      return "Checking for updates…";
     case "available":
     case "downloading":
-      return `Updating to v${updateState.version}`;
+      return `Updating to ${updateVersionLabel()}`;
     case "installing":
-      return "Installing update…";
+      return `Installing ${updateVersionLabel()}…`;
     case "relaunching":
-      return "Restarting…";
+      return `Restarting ${updateVersionLabel()}…`;
     case "error":
-      return "Update failed";
+      return `Update ${updateVersionLabel()} failed`;
     default:
-      return "Update required";
+      return `Updating to ${updateVersionLabel()}`;
   }
 });
 
@@ -34,8 +38,11 @@ const detail = computed(() => {
     }
     return "Downloading…";
   }
+  if (updateState.phase === "installing" || updateState.phase === "relaunching") {
+    return "Almost done — the launcher will restart.";
+  }
   if (updateState.notes) return updateState.notes;
-  return "A new launcher version is required to continue.";
+  return "Downloading the new launcher…";
 });
 
 const showBar = computed(
@@ -54,9 +61,12 @@ const showBar = computed(
     aria-labelledby="update-gate-title"
   >
     <div class="mc-panel w-full max-w-md p-5">
+      <p class="font-mono text-xs tracking-wide text-mc-gold">
+        {{ updateFromToLabel() }}
+      </p>
       <h2
         id="update-gate-title"
-        class="font-pixel pixel-shadow-sm text-lg tracking-wide text-mc-gold"
+        class="font-pixel pixel-shadow-sm mt-2 text-lg tracking-wide text-white"
       >
         {{ title }}
       </h2>

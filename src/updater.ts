@@ -3,6 +3,7 @@
  * If a newer release exists, the UI is blocked until install + relaunch.
  */
 import { reactive } from "vue";
+import { getVersion } from "@tauri-apps/api/app";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { info as logInfo, warn as logWarn, error as logError } from "@tauri-apps/plugin-log";
@@ -20,6 +21,9 @@ export interface UpdateState {
   phase: UpdatePhase;
   /** True while an update is required / in progress — blocks the rest of the app. */
   blocking: boolean;
+  /** Installed app version when the update was detected. */
+  currentVersion: string;
+  /** Target release version from the updater endpoint. */
   version: string;
   notes: string;
   downloaded: number;
@@ -30,12 +34,31 @@ export interface UpdateState {
 export const updateState = reactive<UpdateState>({
   phase: "idle",
   blocking: false,
+  currentVersion: "",
   version: "",
   notes: "",
   downloaded: 0,
   contentLength: 0,
   error: null,
 });
+
+function formatVersion(v: string): string {
+  const trimmed = v.trim();
+  if (!trimmed) return "…";
+  return trimmed.startsWith("v") ? trimmed : `v${trimmed}`;
+}
+
+export function updateVersionLabel(): string {
+  return formatVersion(updateState.version);
+}
+
+export function updateFromToLabel(): string {
+  const to = formatVersion(updateState.version);
+  const from = updateState.currentVersion
+    ? formatVersion(updateState.currentVersion)
+    : null;
+  return from ? `${from} → ${to}` : to;
+}
 
 export const updatePercent = () => {
   const total = updateState.contentLength;
@@ -51,8 +74,19 @@ async function applyUpdate(update: Update) {
   updateState.downloaded = 0;
   updateState.contentLength = 0;
   updateState.error = null;
+  try {
+    updateState.currentVersion = await getVersion();
+  } catch {
+    updateState.currentVersion = "";
+  }
 
-  await logInfo(`Update ${update.version} required — downloading…`);
+  await logInfo(
+    `Update ${formatVersion(update.version)} required` +
+      (updateState.currentVersion
+        ? ` (from ${formatVersion(updateState.currentVersion)})`
+        : "") +
+      " — downloading…",
+  );
 
   updateState.phase = "downloading";
   await update.downloadAndInstall((event) => {
