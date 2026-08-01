@@ -87,7 +87,12 @@ import SignInStatus from "../components/SignInStatus.vue";
           @click="launcher.setActiveAccount(account.id)"
           @keydown.enter="launcher.setActiveAccount(account.id)"
         >
-          <AvatarBlock :seed="account.avatarSeed" :size="32" />
+          <AvatarBlock
+            :uuid="account.uuid"
+            :username="account.username"
+            :seed="account.avatarSeed"
+            :size="32"
+          />
           <span class="min-w-0 flex-1 truncate text-sm text-mc-text">
             {{ account.username }}
           </span>

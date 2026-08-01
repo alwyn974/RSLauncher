@@ -1,12 +1,45 @@
 <script setup lang="ts">
 /**
- * 8x8 procedural Minecraft-style face, generated from the account's
- * avatarSeed — skin tone, hair, and eye color vary per account.
+ * Minecraft player head from the account UUID (mc-heads), with a small
+ * procedural face as fallback when the skin can't be fetched.
  */
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 
-const props = withDefaults(defineProps<{ seed: number; size?: number }>(), {
-  size: 32,
+const props = withDefaults(
+  defineProps<{
+    uuid?: string | null;
+    seed?: number;
+    size?: number;
+    username?: string | null;
+  }>(),
+  {
+    uuid: null,
+    seed: 0,
+    size: 32,
+    username: null,
+  },
+);
+
+const failed = ref(false);
+
+watch(
+  () => [props.uuid, props.username],
+  () => {
+    failed.value = false;
+  },
+);
+
+const src = computed(() => {
+  const id = props.uuid?.replace(/-/g, "").trim();
+  if (id) {
+    // Helm = head + hat overlay, pixel-perfect at requested size.
+    return `https://mc-heads.net/avatar/${id}/${props.size}`;
+  }
+  const name = props.username?.trim();
+  if (name) {
+    return `https://mc-heads.net/avatar/${encodeURIComponent(name)}/${props.size}`;
+  }
+  return null;
 });
 
 function mulberry32(seed: number) {
@@ -36,7 +69,6 @@ const cells = computed(() => {
     grid[y * 8 + x] = c;
   };
 
-  // hair: top 2 rows + sideburns
   for (let x = 0; x < 8; x++) {
     set(x, 0, hair);
     set(x, 1, hair);
@@ -48,13 +80,10 @@ const cells = computed(() => {
     set(7, 3, hair);
   }
 
-  // eyes: white + iris (classic Steve layout, row 3)
   set(1, 3, "#ffffff");
   set(2, 3, eye);
   set(5, 3, eye);
   set(6, 3, "#ffffff");
-
-  // nose shadow + mouth
   set(3, 4, skinDark);
   set(4, 4, skinDark);
   set(3, 6, "#00000055");
@@ -62,20 +91,43 @@ const cells = computed(() => {
 
   return grid;
 });
+
+const showImage = computed(() => !!src.value && !failed.value);
 </script>
 
 <template>
   <div
-    class="mc-bevel grid shrink-0 overflow-hidden bg-mc-inset"
-    :style="{
-      width: `${size}px`,
-      height: `${size}px`,
-      gridTemplateColumns: 'repeat(8, 1fr)',
-      gridTemplateRows: 'repeat(8, 1fr)',
-    }"
+    class="mc-bevel relative shrink-0 overflow-hidden bg-mc-inset"
+    :style="{ width: `${size}px`, height: `${size}px` }"
     role="img"
-    aria-label="Account avatar"
+    :aria-label="username ? `${username} avatar` : 'Account avatar'"
   >
-    <div v-for="(c, i) in cells" :key="i" :style="{ backgroundColor: c }" />
+    <img
+      v-if="showImage"
+      :src="src!"
+      :width="size"
+      :height="size"
+      alt=""
+      draggable="false"
+      class="size-full pixelated"
+      @error="failed = true"
+    />
+    <div
+      v-else
+      class="grid size-full"
+      :style="{
+        gridTemplateColumns: 'repeat(8, 1fr)',
+        gridTemplateRows: 'repeat(8, 1fr)',
+      }"
+    >
+      <div v-for="(c, i) in cells" :key="i" :style="{ backgroundColor: c }" />
+    </div>
   </div>
 </template>
+
+<style scoped>
+.pixelated {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+</style>

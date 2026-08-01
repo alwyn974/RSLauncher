@@ -42,6 +42,8 @@ function remove(id: string) {
     >
       <AvatarBlock
         v-if="launcher.activeAccount.value"
+        :uuid="launcher.activeAccount.value.uuid"
+        :username="launcher.activeAccount.value.username"
         :seed="launcher.activeAccount.value.avatarSeed"
         :size="28"
       />
@@ -65,7 +67,12 @@ function remove(id: string) {
         class="group flex cursor-pointer items-center gap-2 p-1.5 transition-colors duration-150 hover:bg-mc-panel-2"
         @click="choose(account.id)"
       >
-        <AvatarBlock :seed="account.avatarSeed" :size="24" />
+        <AvatarBlock
+          :uuid="account.uuid"
+          :username="account.username"
+          :seed="account.avatarSeed"
+          :size="24"
+        />
         <span class="min-w-0 flex-1 truncate text-sm text-mc-text">
           {{ account.username }}
         </span>
