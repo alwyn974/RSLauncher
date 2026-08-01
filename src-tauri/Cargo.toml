@@ -51,3 +51,4 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 [patch.crates-io]
 lighty-modsloader = { path = "./patched/lighty-modsloader-26.5.12" }
 lighty-launch = { path = "./patched/lighty-launch-26.5.12" }
+lighty-java = { path = "./patched/lighty-java-26.5.12" }

@@ -1,0 +1,57 @@
+--- a/src/runtime.rs
++++ b/src/runtime.rs
+@@ -35,14 +35,42 @@
+             .args(arguments)
+             .stdin(Stdio::null())
+             .stdout(Stdio::piped())
+-            .stderr(Stdio::piped());
++            .stderr(Stdio::piped())
++            // Closing the launcher must not kill Minecraft.
++            .kill_on_drop(false);
+ 
+-        // On Windows, hide the console window
++        // Survive launcher exit: new session + ignore SIGPIPE when the
++        // launcher drops stdout/stderr pipes (default SIGPIPE would kill the JVM).
++        #[cfg(unix)]
++        unsafe {
++            command.pre_exec(|| {
++                // SIG_IGN is preserved across execve; SIG_DFL handlers are not.
++                libc::signal(libc::SIGPIPE, libc::SIG_IGN);
++                // Detach from the launcher's session so terminal SIGHUP
++                // (e.g. closing the terminal that started the launcher) does
++                // not take Minecraft with it.
++                if libc::setsid() == -1 {
++                    // Already a session leader — fine.
++                    let err = std::io::Error::last_os_error();
++                    if err.raw_os_error() != Some(libc::EPERM) {
++                        return Err(err);
++                    }
++                }
++                Ok(())
++            });
++        }
++
++        // On Windows, hide the console window and break away from any job
++        // object so the JVM is not torn down with the launcher.
+         #[cfg(windows)]
+         {
+             use std::os::windows::process::CommandExt;
+             const CREATE_NO_WINDOW: u32 = 0x08000000;
+-            command.creation_flags(CREATE_NO_WINDOW);
++            const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
++            const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x01000000;
++            command.creation_flags(
++                CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP | CREATE_BREAKAWAY_FROM_JOB,
++            );
+         }
+ 
+         let child = command.spawn()?;
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -72,3 +72,6 @@
+ version = "0.1.44"
+ features = ["log"]
+ optional = true
++
++[target."cfg(unix)".dependencies.libc]
++version = "0.2"

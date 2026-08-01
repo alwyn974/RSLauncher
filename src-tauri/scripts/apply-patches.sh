@@ -72,3 +72,4 @@ apply_one() {
 mkdir -p "$OUT"
 apply_one lighty-modsloader
 apply_one lighty-launch
+apply_one lighty-java

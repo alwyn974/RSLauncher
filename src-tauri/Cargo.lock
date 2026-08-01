@@ -2555,9 +2555,8 @@ dependencies = [
 [[package]]
 name = "lighty-java"
 version = "26.5.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ca2843f982b891f2b4a2234bc72385807290e51098c0379f4ddedb0d897580f"
 dependencies = [
+ "libc",
  "lighty-core",
  "lighty-event",
  "path-absolutize",

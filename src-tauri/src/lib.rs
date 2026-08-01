@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use lighty_launcher::mods::curseforge;
 use lighty_launcher::prelude::*;
-use tauri::{LogicalSize, Manager};
+use tauri::{LogicalSize, Manager, RunEvent};
 use tauri_plugin_log::{Target, TargetKind};
 
 use crate::state::LaunchState;
@@ -128,6 +128,20 @@ pub fn run() {
             commands::launch::cancel,
             commands::launch::stop,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let RunEvent::ExitRequested { .. } = event {
+                // Drop our PID tracking without killing the JVM — Minecraft is
+                // intentionally detached (see lighty-java patch).
+                if let Some(state) = app.try_state::<Arc<LaunchState>>() {
+                    if let Some(pid) = state.take_pid() {
+                        log::info!(
+                            target: "rslauncher",
+                            "[launcher] exiting — Minecraft keeps running (pid {pid})"
+                        );
+                    }
+                }
+            }
+        });
 }

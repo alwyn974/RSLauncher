@@ -116,7 +116,13 @@ function onQuickPlay() {
         </div>
 
         <p
-          v-if="!statusLabel && launcher.state.settings.serverAddress"
+          v-if="running"
+          class="font-mono text-xs text-mc-muted"
+        >
+          STOP closes the game — closing the launcher leaves it running
+        </p>
+        <p
+          v-else-if="!statusLabel && launcher.state.settings.serverAddress"
           class="font-mono text-xs text-mc-muted"
         >
           Quick Play → {{ launcher.state.settings.serverAddress }}

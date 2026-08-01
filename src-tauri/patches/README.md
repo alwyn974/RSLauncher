@@ -6,6 +6,7 @@ Only the unified diffs are committed (~5 KB). Full crate trees are **not**.
 |------|--------|
 | `lighty-modsloader+26.5.12.patch` | ForgeCDN fallback when `downloadUrl` is null |
 | `lighty-launch+26.5.12.patch` | Same for CurseForge modpack file resolution |
+| `lighty-java+26.5.12.patch` | Detach JVM so closing the launcher doesn't kill Minecraft |
 
 Apply before any `cargo` / `tauri` command (Cargo must see `patched/` at resolve time):
 
