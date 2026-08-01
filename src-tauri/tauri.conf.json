@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "RSLauncher",
-        "width": 1280,
-        "height": 720,
+        "width": 1024,
+        "height": 768,
         "minWidth": 854,
         "minHeight": 480,
         "center": true,

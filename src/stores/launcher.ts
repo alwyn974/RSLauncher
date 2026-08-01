@@ -102,8 +102,8 @@ export const MODPACK = {
 /** Fallback until CurseForge `minecraft.recommendedRam` is fetched (ATM10 = 8 GiB). */
 const DEFAULT_SETTINGS: Settings = {
   ramGb: 8,
-  width: 1280,
-  height: 720,
+  width: 1024,
+  height: 768,
   fullscreen: false,
   jvmArgs: "",
   serverName: "Eh Zebi",

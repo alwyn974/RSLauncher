@@ -24,8 +24,8 @@ use crate::state::LaunchState;
 const WINDOW_MIN_WIDTH: f64 = 854.0;
 const WINDOW_MIN_HEIGHT: f64 = 480.0;
 /// Must match `app.windows[0].width/height` in tauri.conf.json (used on bad restore).
-const WINDOW_DEFAULT_WIDTH: f64 = 1280.0;
-const WINDOW_DEFAULT_HEIGHT: f64 = 720.0;
+const WINDOW_DEFAULT_WIDTH: f64 = 1024.0;
+const WINDOW_DEFAULT_HEIGHT: f64 = 768.0;
 
 /// After `window-state` restore, clamp absurd sizes (e.g. a near-fullscreen
 /// physical size saved with `maximized: false`) back to the default.

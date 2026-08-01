@@ -23,8 +23,8 @@ function clampDraft() {
     ramMax.value,
     Math.max(ramMin.value, Math.round(Number(draft.ramGb) || ramRecommended.value)),
   );
-  draft.width = Math.min(7680, Math.max(640, Number(draft.width) || 1280));
-  draft.height = Math.min(4320, Math.max(480, Number(draft.height) || 720));
+  draft.width = Math.min(7680, Math.max(640, Number(draft.width) || 1024));
+  draft.height = Math.min(4320, Math.max(480, Number(draft.height) || 768));
 }
 
 function save() {

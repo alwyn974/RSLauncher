@@ -35,8 +35,8 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             ram_gb: crate::config::FALLBACK_RECOMMENDED_RAM_GB,
-            width: 1280,
-            height: 720,
+            width: 1024,
+            height: 768,
             fullscreen: false,
             jvm_args: String::new(),
             server_name: default_server_name(),
