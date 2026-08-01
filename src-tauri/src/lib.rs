@@ -15,9 +15,62 @@ use std::sync::Arc;
 
 use lighty_launcher::mods::curseforge;
 use lighty_launcher::prelude::*;
+use tauri::{LogicalSize, Manager};
 use tauri_plugin_log::{Target, TargetKind};
 
 use crate::state::LaunchState;
+
+/// Minecraft’s classic default window — also `minWidth` / `minHeight` in tauri.conf.
+const WINDOW_MIN_WIDTH: f64 = 854.0;
+const WINDOW_MIN_HEIGHT: f64 = 480.0;
+/// Must match `app.windows[0].width/height` in tauri.conf.json (used on bad restore).
+const WINDOW_DEFAULT_WIDTH: f64 = 1280.0;
+const WINDOW_DEFAULT_HEIGHT: f64 = 720.0;
+
+/// After `window-state` restore, clamp absurd sizes (e.g. a near-fullscreen
+/// physical size saved with `maximized: false`) back to the default.
+fn clamp_main_window_size(app: &tauri::App) -> tauri::Result<()> {
+    let Some(win) = app.get_webview_window("main") else {
+        return Ok(());
+    };
+    if win.is_maximized()? || win.is_fullscreen()? {
+        return Ok(());
+    }
+
+    let scale = win.scale_factor()?;
+    let physical = win.inner_size()?;
+    let logical_w = physical.width as f64 / scale;
+    let logical_h = physical.height as f64 / scale;
+
+    let monitor_logical = win.current_monitor()?.map(|m| {
+        let s = m.size();
+        (s.width as f64 / scale, s.height as f64 / scale)
+    });
+
+    let mut width = logical_w.max(WINDOW_MIN_WIDTH);
+    let mut height = logical_h.max(WINDOW_MIN_HEIGHT);
+    let mut reset = false;
+
+    if let Some((mw, mh)) = monitor_logical {
+        // Physical size larger than the monitor → bad restore (common HiDPI glitch).
+        if width > mw || height > mh {
+            width = WINDOW_DEFAULT_WIDTH;
+            height = WINDOW_DEFAULT_HEIGHT;
+            reset = true;
+        }
+    }
+
+    if reset || (width - logical_w).abs() > 0.5 || (height - logical_h).abs() > 0.5 {
+        win.set_size(LogicalSize::new(width, height))?;
+        if reset {
+            log::warn!(
+                target: "rslauncher",
+                "[launcher] reset window size from {logical_w:.0}×{logical_h:.0} → {width:.0}×{height:.0}"
+            );
+        }
+    }
+    Ok(())
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -54,6 +107,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            if let Err(err) = clamp_main_window_size(app) {
+                log::warn!(target: "rslauncher", "[launcher] window size clamp: {err}");
+            }
+            Ok(())
+        })
         .manage(launch_state)
         .invoke_handler(tauri::generate_handler![
             commands::auth::login_with_microsoft,
