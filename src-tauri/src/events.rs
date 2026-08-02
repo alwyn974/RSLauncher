@@ -65,7 +65,7 @@ pub fn spawn_bridge(app: AppHandle, bus: EventBus, launch_state: Arc<LaunchState
                     emit_log(
                         "INFO",
                         "launcher",
-                        format!("Installing — {detail}"),
+                        format!("Installing - {detail}"),
                     );
                     emit_progress(
                         &app,

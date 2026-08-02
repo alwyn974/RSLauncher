@@ -1,11 +1,9 @@
-# Modpack profile — baked into the launcher at compile time.
+# Modpack profile - baked into the launcher at compile time.
 
 instance_name = "ATM10"
 # UI label (Play screen). Defaults to instance_name if omitted.
 display_name = "All the Mods 10"
 display_version = "7.2"
-# Cosmetic mod count shown in the UI (optional).
-mod_count = 482
 
 minecraft = "1.21.1"
 # fabric | quilt | forge | neoforge | vanilla
@@ -15,7 +13,7 @@ fallback_ram_gb = 8
 min_ram_gb = 2
 
 [pack]
-# CurseForge: All the Mods 10 — https://www.curseforge.com/minecraft/modpacks/all-the-mods-10/files/8469481
+# CurseForge: All the Mods 10 - https://www.curseforge.com/minecraft/modpacks/all-the-mods-10/files/8469481
 provider = "curseforge"
 project_id = 925200
 file_id = 8469481
@@ -75,6 +73,51 @@ file_id = 7968280
 project_id = 1514529
 file_id = 8493955
 # aeronautics-claims
+
+[[required_curseforge]]
+project_id = 1533137
+file_id = 8268622
+# create-deep-seas
+
+[[required_curseforge]]
+project_id = 1559550
+file_id = 8427886
+# create-aeronautics-shield-generator-force-field
+
+[[required_curseforge]]
+project_id = 1537945
+file_id = 8523257
+# create-aeronautics-gadgets-and-gizmos
+
+[[required_curseforge]]
+project_id = 1537420
+file_id = 8348610
+# create-aeronautics-automated-logistics
+
+[[required_curseforge]]
+project_id = 1526820
+file_id = 8549361
+# aeronautics-camera-sync
+
+[[required_curseforge]]
+project_id = 646668
+file_id = 8303106
+# create-big-cannons
+
+[[required_curseforge]]
+project_id = 1279407
+file_id = 7587771
+# ritchies-projectile-library
+
+[[required_curseforge]]
+project_id = 1522736
+file_id = 8496246
+# create-propulsion-simulated
+
+[[required_curseforge]]
+project_id = 1522473
+file_id = 8562945
+# create-aeroworks
 
 # [[required_modrinth]]
 # project = "example"

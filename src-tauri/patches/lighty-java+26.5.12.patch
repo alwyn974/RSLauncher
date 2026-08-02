@@ -21,7 +21,7 @@
 +                // (e.g. closing the terminal that started the launcher) does
 +                // not take Minecraft with it.
 +                if libc::setsid() == -1 {
-+                    // Already a session leader — fine.
++                    // Already a session leader - fine.
 +                    let err = std::io::Error::last_os_error();
 +                    if err.raw_os_error() != Some(libc::EPERM) {
 +                        return Err(err);

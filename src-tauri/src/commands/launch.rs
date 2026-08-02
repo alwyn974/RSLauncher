@@ -40,7 +40,7 @@ fn emit_launch_error(app: &AppHandle, err: &AppError) {
 
 async fn resolve_profile() -> Result<UserProfile, AppError> {
     let uuid = accounts::active_uuid()?
-        .ok_or_else(|| AppError::msg("No active account — sign in first"))?;
+        .ok_or_else(|| AppError::msg("No active account - sign in first"))?;
 
     let client_id = config::azure_client_id().ok_or_else(|| {
         AppError::msg(
@@ -73,15 +73,13 @@ async fn resolve_profile() -> Result<UserProfile, AppError> {
     }
 
     Err(AppError::msg(
-        "Session expired — sign in with Microsoft again",
+        "Session expired - sign in with Microsoft again",
     ))
 }
 
 #[tauri::command]
 pub async fn get_instance_status() -> InstanceStatus {
-    InstanceStatus {
-        installed: modpack::is_pack_installed(),
-    }
+    InstanceStatus::current()
 }
 
 #[tauri::command]
@@ -104,7 +102,7 @@ pub async fn play(
             "preparing",
             "Preparing launch",
             if quick_play {
-                "Quick Play — refreshing session…"
+                "Quick Play - refreshing session…"
             } else {
                 "Refreshing Microsoft session…"
             },
@@ -143,12 +141,7 @@ pub async fn play(
                 emit_launch_error(&app_handle, &err);
             }
         } else {
-            let _ = app_handle.emit(
-                "instance://status",
-                InstanceStatus {
-                    installed: modpack::is_pack_installed(),
-                },
-            );
+            let _ = app_handle.emit("instance://status", InstanceStatus::current());
         }
     });
 
@@ -185,7 +178,7 @@ async fn run_launch(
 
     if quick_play && server_address.is_empty() {
         return Err(AppError::msg(
-            "Quick Play needs a server address — set one in Settings",
+            "Quick Play needs a server address - set one in Settings",
         ));
     }
 

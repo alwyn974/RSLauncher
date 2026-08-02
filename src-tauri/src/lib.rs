@@ -23,7 +23,7 @@ use tauri_plugin_log::{Target, TargetKind};
 
 use crate::state::LaunchState;
 
-/// Minecraft’s classic default window — also `minWidth` / `minHeight` in tauri.conf.
+/// Minecraft’s classic default window - also `minWidth` / `minHeight` in tauri.conf.
 const WINDOW_MIN_WIDTH: f64 = 854.0;
 const WINDOW_MIN_HEIGHT: f64 = 480.0;
 /// Must match `app.windows[0].width/height` in tauri.conf.json (used on bad restore).
@@ -145,13 +145,13 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if let RunEvent::ExitRequested { .. } = event {
-                // Drop our PID tracking without killing the JVM — Minecraft is
+                // Drop our PID tracking without killing the JVM - Minecraft is
                 // intentionally detached (see lighty-java patch).
                 if let Some(state) = app.try_state::<Arc<LaunchState>>() {
                     if let Some(pid) = state.take_pid() {
                         log::info!(
                             target: "rslauncher",
-                            "[launcher] exiting — Minecraft keeps running (pid {pid})"
+                            "[launcher] exiting - Minecraft keeps running (pid {pid})"
                         );
                     }
                 }

@@ -1,5 +1,5 @@
 /**
- * Launcher state — backed by Tauri commands/events:
+ * Launcher state - backed by Tauri commands/events:
  *
  *   commands: login_with_microsoft, remove_account, set_active_account,
  *             get_settings, save_settings, get_catalog, play, cancel, stop
@@ -64,7 +64,7 @@ export interface ModpackInfo {
   minecraft: string;
   loader: string;
   loaderVersion: string;
-  modCount: number | null;
+  modCount: number;
   instanceName: string;
 }
 
@@ -133,7 +133,7 @@ const EMPTY_MODPACK: ModpackInfo = {
   minecraft: "",
   loader: "",
   loaderVersion: "",
-  modCount: null,
+  modCount: 0,
   instanceName: "",
 };
 
@@ -179,7 +179,7 @@ interface LauncherState {
   deviceCode: DeviceCode | null;
   authStep: string;
   progress: Progress;
-  /** Last pipeline step reached — kept on error/cancel so the UI marks the right step. */
+  /** Last pipeline step reached - kept on error/cancel so the UI marks the right step. */
   progressPhase: LaunchStage;
   logs: LogLine[];
   installed: boolean;
@@ -302,7 +302,7 @@ function log(level: LogLine["level"], source: string, message: string) {
 }
 
 function parseBackendLog(message: string): { source: string; message: string } {
-  const match = /^\[([^\]]+)\]\s*([\s\S]*)$/.exec(message);
+  const match = /^\[([^\]]+)]\s*([\s\S]*)$/.exec(message);
   if (!match) return { source: "backend", message };
   return { source: match[1] || "backend", message: match[2] ?? "" };
 }
@@ -347,15 +347,16 @@ export async function initLauncher() {
           log(
             "INFO",
             "auth",
-            `Device code ready: ${e.payload.code} — open ${e.payload.url}`,
+            `Device code ready: ${e.payload.code} - open ${e.payload.url}`,
           );
         }
       }),
       await listen<{ step: string }>("auth://status", (e) => {
         state.authStep = e.payload.step;
       }),
-      await listen<{ installed: boolean }>("instance://status", (e) => {
+      await listen<{ installed: boolean; modCount: number }>("instance://status", (e) => {
         state.installed = e.payload.installed;
+        state.catalog.modpack.modCount = e.payload.modCount;
       }),
       await listen<MemoryInfo>("memory://updated", (e) => {
         state.memory = { ...DEFAULT_MEMORY, ...e.payload };
@@ -376,12 +377,13 @@ export async function initLauncher() {
         invoke<Catalog>("get_catalog"),
         invoke<Account | null>("get_active_account"),
         invoke<MemoryInfo>("get_memory_info"),
-        invoke<{ installed: boolean }>("get_instance_status"),
+        invoke<{ installed: boolean; modCount: number }>("get_instance_status"),
       ]);
       syncActive(accounts, active);
       state.memory = { ...DEFAULT_MEMORY, ...memory };
       state.installed = status.installed;
       state.catalog = catalog;
+      state.catalog.modpack.modCount = status.modCount;
       state.settings = {
         ...DEFAULT_SETTINGS,
         ...settings,
@@ -458,6 +460,7 @@ async function saveSettings(next: Settings) {
       enabledShaderVariants: { ...saved.enabledShaderVariants },
     };
     state.catalog = await invoke<Catalog>("get_catalog");
+    await refreshInstallStatus();
     log("INFO", "launcher", "Settings saved");
   } catch (e) {
     log("ERROR", "launcher", String(e));
@@ -479,8 +482,11 @@ function resetSettings(): Settings {
 
 async function refreshInstallStatus() {
   try {
-    const status = await invoke<{ installed: boolean }>("get_instance_status");
+    const status = await invoke<{ installed: boolean; modCount: number }>(
+      "get_instance_status",
+    );
     state.installed = status.installed;
+    state.catalog.modpack.modCount = status.modCount;
   } catch {
     /* ignore */
   }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * Authored pixel icons on a 16x16 grid. One fill color (currentColor),
- * square rects only, crisp edges — the launcher's icon system.
+ * square rects only, crisp edges - the launcher's icon system.
  */
 import { computed } from "vue";
 

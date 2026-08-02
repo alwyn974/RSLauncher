@@ -1,4 +1,4 @@
-# Design — RSLauncher
+# Design - RSLauncher
 
 <!-- Visual system: Minecraft-native. Durable rules; exact tokens live in src/assets/main.css (@theme). -->
 

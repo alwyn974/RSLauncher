@@ -72,7 +72,7 @@ function onQuickPlay() {
         <p class="mt-3 inline-block border-2 border-mc-border bg-mc-panel px-2 py-1 font-mono text-xs text-mc-gold">
           <template v-if="modpack.version">{{ modpack.version }} · </template>
           Minecraft {{ modpack.minecraft }} · {{ modpack.loader }} {{ modpack.loaderVersion }}
-          <template v-if="modpack.modCount != null"> · {{ modpack.modCount }} mods</template>
+          <template v-if="modpack.modCount > 0"> · {{ modpack.modCount }} mods</template>
         </p>
       </div>
 
@@ -122,7 +122,7 @@ function onQuickPlay() {
           v-if="running"
           class="font-mono text-xs text-mc-muted"
         >
-          STOP closes the game — closing the launcher leaves it running
+          STOP closes the game - closing the launcher leaves it running
         </p>
         <p
           v-else-if="!statusLabel && launcher.state.settings.serverAddress"

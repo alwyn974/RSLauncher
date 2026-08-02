@@ -59,7 +59,7 @@
 +                    if let Ok(mods) = serde_json::from_slice::<Vec<Mods>>(&bytes) {
 +                        if !mods.is_empty() {
 +                            lighty_core::trace_info!(
-+                                "[Modpack] Cached mod list ({} entries) — install will verify",
++                                "[Modpack] Cached mod list ({} entries) - install will verify",
 +                                mods.len()
 +                            );
 +                            #[cfg(feature = "events")]
@@ -74,7 +74,7 @@
 +                    }
 +                }
 +                lighty_core::trace_warn!(
-+                    "[Modpack] Marker present but mod list cache missing/empty — rebuilding"
++                    "[Modpack] Marker present but mod list cache missing/empty - rebuilding"
                  );
 -                return Ok(Vec::new());
              }

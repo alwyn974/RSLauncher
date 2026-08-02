@@ -59,7 +59,7 @@ pub struct ModpackInfoDto {
     pub minecraft: String,
     pub loader: String,
     pub loader_version: String,
-    pub mod_count: Option<u32>,
+    pub mod_count: u32,
     pub instance_name: String,
 }
 
@@ -117,7 +117,7 @@ pub fn catalog_dto(settings: &Settings) -> CatalogDto {
             minecraft: profile.minecraft.clone(),
             loader: profile.loader_label().to_string(),
             loader_version: profile.loader_version.clone(),
-            mod_count: profile.mod_count,
+            mod_count: crate::modpack::active_mod_count(),
             instance_name: profile.instance_name.clone(),
         },
         optional_mods: optional_mods()

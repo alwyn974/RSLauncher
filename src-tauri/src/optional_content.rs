@@ -1,7 +1,7 @@
 //! Sync optional mod jars (.disabled) and shaderpack Iris configs on disk.
 //!
 //! Jar filenames are resolved from CurseForge / Modrinth (same APIs Lighty uses).
-//! Shader presets only write/remove `.txt` next to packs that already exist —
+//! Shader presets only write/remove `.txt` next to packs that already exist -
 //! we never create or duplicate shaderpacks (Euphoria Patches owns that).
 
 use std::fs;
@@ -61,7 +61,7 @@ async fn sync_optional_mod_jars(game_dir: &Path, settings: &Settings) -> Result<
             } else if !active.is_file() && !disabled.is_file() {
                 log::debug!(
                     target: "rslauncher",
-                    "[optional] no jar yet for {} ({}) — install will fetch it",
+                    "[optional] no jar yet for {} ({}) - install will fetch it",
                     entry.id,
                     jar_name
                 );
@@ -160,7 +160,7 @@ fn ensure_shader_configs(game_dir: &Path, settings: &Settings) -> Result<(), App
             } else {
                 log::warn!(
                     target: "rslauncher",
-                    "[shaders] wrote {} but pack {:?} is missing — apply Euphoria in-game",
+                    "[shaders] wrote {} but pack {:?} is missing - apply Euphoria in-game",
                     txt_path.display(),
                     pack_stem
                 );

@@ -19,7 +19,7 @@ export type UpdatePhase =
 
 export interface UpdateState {
   phase: UpdatePhase;
-  /** True while an update is required / in progress — blocks the rest of the app. */
+  /** True while an update is required / in progress - blocks the rest of the app. */
   blocking: boolean;
   /** Installed app version when the update was detected. */
   currentVersion: string;
@@ -85,7 +85,7 @@ async function applyUpdate(update: Update) {
       (updateState.currentVersion
         ? ` (from ${formatVersion(updateState.currentVersion)})`
         : "") +
-      " — downloading…",
+      " - downloading…",
   );
 
   updateState.phase = "downloading";
@@ -104,7 +104,7 @@ async function applyUpdate(update: Update) {
   });
 
   updateState.phase = "relaunching";
-  await logInfo(`Update ${update.version} installed — relaunching`);
+  await logInfo(`Update ${update.version} installed - relaunching`);
   await relaunch();
 }
 

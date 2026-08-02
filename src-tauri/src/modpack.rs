@@ -64,6 +64,25 @@ pub fn is_pack_installed() -> bool {
     dir_has_entries(&mods_dir) || dir_has_entries(&versions_dir)
 }
 
+/// Count enabled mod jars in `mods/` (excludes `*.jar.disabled`).
+pub fn active_mod_count() -> u32 {
+    let instance = build_instance();
+    let mods_dir = instance.game_dirs().join("mods");
+    let Ok(entries) = std::fs::read_dir(mods_dir) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+        .filter(|e| {
+            let name = e.file_name();
+            let name = name.to_string_lossy();
+            let lower = name.to_ascii_lowercase();
+            lower.ends_with(".jar") && !lower.ends_with(".jar.disabled")
+        })
+        .count() as u32
+}
+
 fn dir_has_entries(path: &std::path::Path) -> bool {
     std::fs::read_dir(path)
         .ok()

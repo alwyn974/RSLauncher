@@ -1,5 +1,5 @@
 # Populate GitHub Actions caches on `main` so tag/publish runs can restore them.
-# Caches created on tags are NOT visible to other tags — only default-branch
+# Caches created on tags are NOT visible to other tags - only default-branch
 # caches are (GitHub scoping). Keep `shared-key` in sync with publish.yml.
 name: Cache
 
@@ -60,5 +60,5 @@ jobs:
 
       - name: Release build (warm compile cache)
         # Full tauri build matches publish compile units better than cargo check.
-        # No GitHub release — cache only.
+        # No GitHub release - cache only.
         run: pnpm tauri build

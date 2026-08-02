@@ -124,6 +124,17 @@ impl Progress {
 #[serde(rename_all = "camelCase")]
 pub struct InstanceStatus {
     pub installed: bool,
+    /// Active jars in `mods/` (excludes `.jar.disabled`).
+    pub mod_count: u32,
+}
+
+impl InstanceStatus {
+    pub fn current() -> Self {
+        Self {
+            installed: crate::modpack::is_pack_installed(),
+            mod_count: crate::modpack::active_mod_count(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

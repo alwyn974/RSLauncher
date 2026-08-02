@@ -10,7 +10,7 @@ import UpdateGate from "./components/UpdateGate.vue";
 
 const bootstrapped = ref(false);
 const signedOut = computed(() => !launcher.activeAccount.value);
-// Only after an update is actually found — never during the silent check.
+// Only after an update is actually found - never during the silent check.
 const showUpdateGate = computed(() => updateState.blocking);
 
 onMounted(() => {

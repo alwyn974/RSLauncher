@@ -1,7 +1,7 @@
 /*
-  DIRECTION CONTRACT — RSLauncher
-  THESIS: The launcher is drawn with Minecraft's own menu grammar — beveled block
-    buttons, pixel lettering, dark tiled dirt — not a generic dark desktop app.
+  DIRECTION CONTRACT - RSLauncher
+  THESIS: The launcher is drawn with Minecraft's own menu grammar - beveled block
+    buttons, pixel lettering, dark tiled dirt - not a generic dark desktop app.
   OWN-WORLD: Square corners always; 2px black borders; inset bevel highlight/shadow
     pairs; Monocraft pixel type with hard 2px text shadow; green = Play only,
     gold = info/warn, red = error/danger; darkened dirt-tile ground.
@@ -72,7 +72,7 @@
   }
 
   body {
-    font-family: var(--font-sans);
+    font-family: var(--font-sans), sans-serif;
     color: var(--color-mc-text);
     background-color: var(--color-mc-bg);
     background-image:

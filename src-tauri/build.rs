@@ -32,7 +32,7 @@ fn bake_secret(env_name: &str, file_name: &str, rustc_env: &str) {
 
     println!("cargo:rerun-if-env-changed={env_name}");
     println!("cargo:rerun-if-changed={file_name}");
-    // Literal embed — do not print the value to logs.
+    // Literal embed - do not print the value to logs.
     println!("cargo:rustc-env={rustc_env}={value}");
 }
 

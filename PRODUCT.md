@@ -8,7 +8,7 @@ web
 
 ## Users
 
-Personal project: the author (and later friends) launching one fixed custom Minecraft modpack. Desktop app (Tauri webview shell), used in a gaming context — quick in, play, quick out.
+Personal project: the author (and later friends) launching one fixed custom Minecraft modpack. Desktop app (Tauri webview shell), used in a gaming context - quick in, play, quick out.
 
 ## Product Purpose
 
@@ -29,7 +29,7 @@ Deliberately smaller than general-purpose launchers (Prism, CurseForge, Modrinth
 
 - Microsoft login button as the only auth path.
 - Multiple Minecraft accounts stored locally; switchable; removable.
-- Fixed custom modpack — no version or modpack selection UI.
+- Fixed custom modpack - no version or modpack selection UI.
 - Settings: RAM allocation, game resolution (width/height, fullscreen), custom JVM arguments.
 - Progress display for downloads and launch steps: percent, file count, current file, speed, ETA.
 - Game log viewer (levels, auto-scroll, copy/clear).
@@ -39,7 +39,7 @@ Deliberately smaller than general-purpose launchers (Prism, CurseForge, Modrinth
 ## Brand Commitments
 
 - Name: **RSLauncher** (window title and product name in `tauri.conf.json`).
-- Visual world: Minecraft-native — the game UI's own grammar (pixel lettering, beveled block buttons, dark dirt/stone surfaces), confirmed with the owner.
+- Visual world: Minecraft-native - the game UI's own grammar (pixel lettering, beveled block buttons, dark dirt/stone surfaces), confirmed with the owner.
 
 ## Evidence on Hand
 
@@ -50,4 +50,4 @@ None beyond the scaffold. No logo, screenshots, or copy assets exist; the build 
 - One job, one button: Play is the hero; everything else is secondary.
 - Never hide launch state: the player always sees what is happening and how long it takes.
 - Speak Minecraft: the interface uses the game's own visual language, familiar to any player.
-- Settings are few and plain: RAM, resolution, JVM args — nothing else.
+- Settings are few and plain: RAM, resolution, JVM args - nothing else.

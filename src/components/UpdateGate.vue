@@ -1,6 +1,6 @@
 <script setup lang="ts">
 /**
- * Full-window gate for mandatory launcher updates — no dismiss.
+ * Full-window gate for mandatory launcher updates - no dismiss.
  */
 import { computed } from "vue";
 import {
@@ -39,7 +39,7 @@ const detail = computed(() => {
     return "Downloading…";
   }
   if (updateState.phase === "installing" || updateState.phase === "relaunching") {
-    return "Almost done — the launcher will restart.";
+    return "Almost done - the launcher will restart.";
   }
   if (updateState.notes) return updateState.notes;
   return "Downloading the new launcher…";

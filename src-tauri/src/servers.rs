@@ -1,7 +1,7 @@
 //! Ensure a default multiplayer server exists in the instance `servers.dat`.
 //!
 //! Modern Minecraft (1.21+) writes **uncompressed** NBT. Older builds used
-//! gzip — we read both, and always write uncompressed to match vanilla.
+//! gzip - we read both, and always write uncompressed to match vanilla.
 
 use std::fs;
 use std::io::Read;
