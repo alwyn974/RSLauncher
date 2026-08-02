@@ -21,11 +21,20 @@ watch(
   () => launcher.state.logs.length,
   async () => {
     if (!autoScroll.value) return;
-    await nextTick();
-    const el = scroller.value;
-    if (el) el.scrollTop = el.scrollHeight;
+    await scrollToEnd();
   },
 );
+
+async function scrollToEnd() {
+  await nextTick();
+  const el = scroller.value;
+  if (el) el.scrollTop = el.scrollHeight;
+}
+
+function goToEnd() {
+  autoScroll.value = true;
+  void scrollToEnd();
+}
 
 async function copy() {
   const text = launcher.state.logs
@@ -51,6 +60,9 @@ async function copy() {
         @click="autoScroll = !autoScroll"
       >
         Auto-scroll {{ autoScroll ? "on" : "off" }}
+      </PixelButton>
+      <PixelButton class="px-2 py-1 text-[10px]" aria-label="Scroll to end" @click="goToEnd">
+        End
       </PixelButton>
       <PixelButton class="px-2 py-1 text-[10px]" @click="copy">
         <PixelIcon name="copy" :size="12" />
