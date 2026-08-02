@@ -25,28 +25,6 @@ pub const NEOFORGE_VERSION: &str = "21.1.241";
 pub const FALLBACK_RECOMMENDED_RAM_GB: u32 = 8;
 pub const MIN_RAM_GB: u32 = 2;
 
-/// Modrinth: `(slug_or_id, optional_version_id)`
-pub const EXTRA_MODRINTH_MODS: &[(&str, Option<&str>)] = &[
-
-];
-/// CurseForge: `(mod_id, optional_file_id)`
-pub const EXTRA_CURSEFORGE_MODS: &[(u32, Option<u32>)] = &[
-     (676721,  Some(8240058)),  // create-aeronautics
-     (1312371, Some(8263584)), // sable
-     (1528764, Some(8464450)), // create-aeronautics-climbable-ropes
-     (1524471, Some(8404634)), // waystones-sable
-     (1532334, Some(8249093)), // create-aeronautics-x-curios-api-compat
-     (1529882, Some(8368780)), // create-aeronautics-throwable-rope-connector
-     (1521213, Some(8002670)), // create-aeronautics-portable-engine-liquid-fuel
-     (1519765, Some(7968280)), // create-tracks
-     (1514529, Some(8493955)), // aeronautics-claims
-     // Optional
-     (1198238, Some(8150396)),  // discord-chat-connect
-     (734339,  Some(7996932)),  // ping-wheel
-     (1537977, Some(8189365)),  // ping-to-map
-     (1530988, Some(8269260)),  // jade-sable-compat
-];
-
 /// Default multiplayer entry written into `servers.dat` when missing.
 pub const DEFAULT_SERVER_NAME: &str = "Eh Zebi";
 pub const DEFAULT_SERVER_ADDRESS: &str = "mc.alwyn974.re";

@@ -1,9 +1,19 @@
 use lighty_launcher::prelude::*;
 
+use crate::catalog::{
+    self, REQUIRED_CURSEFORGE_MODS, REQUIRED_MODRINTH_MODS,
+};
 use crate::config;
+use crate::dto::Settings;
+use crate::settings;
 
-/// Build the ATM10 instance (CurseForge pack + optional extra mods).
+/// Build the ATM10 instance (CurseForge pack + required/optional extras).
 pub fn build_instance() -> VersionBuilder<Loader> {
+    let settings = settings::load().unwrap_or_default();
+    build_instance_with(&settings)
+}
+
+pub fn build_instance_with(settings: &Settings) -> VersionBuilder<Loader> {
     let mut mods = VersionBuilder::new(
         config::INSTANCE_NAME,
         Loader::NeoForge,
@@ -13,16 +23,19 @@ pub fn build_instance() -> VersionBuilder<Loader> {
     .with_mod()
     .with_curseforge_modpack(config::ATM10_PROJECT_ID, config::ATM10_FILE_ID);
 
-    if !config::EXTRA_MODRINTH_MODS.is_empty() {
-        let list: Vec<(String, Option<String>)> = config::EXTRA_MODRINTH_MODS
-            .iter()
-            .map(|(id, ver)| ((*id).to_string(), ver.map(|v| v.to_string())))
-            .collect();
-        mods = mods.with_modrinth_mods(list);
+    let mut cf = REQUIRED_CURSEFORGE_MODS.to_vec();
+    cf.extend(catalog::enabled_curseforge_optionals(settings));
+    if !cf.is_empty() {
+        mods = mods.with_curseforge_mods(cf);
     }
 
-    if !config::EXTRA_CURSEFORGE_MODS.is_empty() {
-        mods = mods.with_curseforge_mods(config::EXTRA_CURSEFORGE_MODS.to_vec());
+    let mut mr: Vec<(String, Option<String>)> = REQUIRED_MODRINTH_MODS
+        .iter()
+        .map(|(id, ver)| ((*id).to_string(), ver.map(|v| v.to_string())))
+        .collect();
+    mr.extend(catalog::enabled_modrinth_optionals(settings));
+    if !mr.is_empty() {
+        mods = mods.with_modrinth_mods(mr);
     }
 
     mods.done()

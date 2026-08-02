@@ -34,6 +34,21 @@ pub fn spawn_bridge(app: AppHandle, bus: EventBus, launch_state: Arc<LaunchState
         while let Ok(event) = rx.next().await {
             match event {
                 Event::Launch(LaunchEvent::IsInstalled { version }) => {
+                    if let Ok(settings) = crate::settings::load() {
+                        let instance = crate::modpack::build_instance_with(&settings);
+                        if let Err(err) = crate::optional_content::sync(
+                            instance.game_dirs(),
+                            &settings,
+                        )
+                        .await
+                        {
+                            emit_log(
+                                "WARN",
+                                "launcher",
+                                format!("Optional content sync failed: {err}"),
+                            );
+                        }
+                    }
                     let msg = format!("{version} already installed");
                     emit_log("INFO", "launcher", &msg);
                     emit_progress(
@@ -115,7 +130,7 @@ pub fn spawn_bridge(app: AppHandle, bus: EventBus, launch_state: Arc<LaunchState
                     // Re-write after modpack overrides — they can clobber an
                     // early servers.dat written before install.
                     if let Ok(settings) = crate::settings::load() {
-                        let instance = crate::modpack::build_instance();
+                        let instance = crate::modpack::build_instance_with(&settings);
                         if let Err(err) = crate::servers::ensure_default_server(
                             instance.game_dirs(),
                             &settings.server_name,
@@ -125,6 +140,19 @@ pub fn spawn_bridge(app: AppHandle, bus: EventBus, launch_state: Arc<LaunchState
                                 "WARN",
                                 "launcher",
                                 format!("Could not refresh servers.dat: {err}"),
+                            );
+                        }
+                        // Jars / shader variants must be correct before the JVM starts.
+                        if let Err(err) = crate::optional_content::sync(
+                            instance.game_dirs(),
+                            &settings,
+                        )
+                        .await
+                        {
+                            emit_log(
+                                "WARN",
+                                "launcher",
+                                format!("Optional content sync failed: {err}"),
                             );
                         }
                     }

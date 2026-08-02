@@ -1,4 +1,5 @@
 mod accounts;
+mod catalog;
 mod commands;
 mod config;
 mod dto;
@@ -7,6 +8,7 @@ mod events;
 mod memory;
 mod modpack;
 mod modpack_meta;
+mod optional_content;
 mod servers;
 mod settings;
 mod state;
@@ -130,6 +132,7 @@ pub fn run() {
             commands::auth::get_active_account,
             commands::settings::get_settings,
             commands::settings::save_settings,
+            commands::settings::get_catalog,
             commands::settings::get_memory_info,
             commands::launch::get_instance_status,
             commands::launch::play,

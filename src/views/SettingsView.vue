@@ -1,13 +1,30 @@
 <script setup lang="ts">
 /**
- * Settings: RAM, resolution, server address, custom JVM arguments.
+ * Settings: RAM, resolution, server, optional mods, shader presets, JVM args.
  */
 import { computed, reactive } from "vue";
 import { launcher, type Settings } from "../stores/launcher";
 import PixelButton from "../components/PixelButton.vue";
 import PixelIcon from "../components/PixelIcon.vue";
 
-const draft = reactive<Settings>({ ...launcher.state.settings });
+function materializeToggles(): Pick<Settings, "enabledOptionalMods" | "enabledShaderVariants"> {
+  const optional: Record<string, boolean> = {};
+  for (const mod of launcher.state.catalog.optionalMods) {
+    optional[mod.id] =
+      launcher.state.settings.enabledOptionalMods[mod.id] ?? mod.defaultEnabled;
+  }
+  const shaders: Record<string, boolean> = {};
+  for (const shader of launcher.state.catalog.shaderVariants) {
+    shaders[shader.id] =
+      launcher.state.settings.enabledShaderVariants[shader.id] ?? shader.defaultEnabled;
+  }
+  return { enabledOptionalMods: optional, enabledShaderVariants: shaders };
+}
+
+const draft = reactive<Settings>({
+  ...launcher.state.settings,
+  ...materializeToggles(),
+});
 
 const ramMin = computed(() => launcher.state.memory.minGb);
 const ramMax = computed(() => Math.max(launcher.state.memory.totalGb, ramMin.value));
@@ -18,6 +35,17 @@ const ramRecommended = computed(() =>
   ),
 );
 
+const optionalMods = computed(() => launcher.state.catalog.optionalMods);
+const shaderVariants = computed(() => launcher.state.catalog.shaderVariants);
+
+function toggleOptional(id: string) {
+  draft.enabledOptionalMods[id] = !draft.enabledOptionalMods[id];
+}
+
+function toggleShader(id: string) {
+  draft.enabledShaderVariants[id] = !draft.enabledShaderVariants[id];
+}
+
 function clampDraft() {
   draft.ramGb = Math.min(
     ramMax.value,
@@ -27,14 +55,31 @@ function clampDraft() {
   draft.height = Math.min(4320, Math.max(480, Number(draft.height) || 768));
 }
 
-function save() {
+async function save() {
   clampDraft();
-  launcher.saveSettings({ ...draft });
+  await launcher.saveSettings({
+    ramGb: draft.ramGb,
+    width: draft.width,
+    height: draft.height,
+    fullscreen: draft.fullscreen,
+    jvmArgs: draft.jvmArgs,
+    serverName: draft.serverName,
+    serverAddress: draft.serverAddress,
+    enabledOptionalMods: { ...draft.enabledOptionalMods },
+    enabledShaderVariants: { ...draft.enabledShaderVariants },
+  });
   launcher.setView("play");
 }
 
 function reset() {
-  Object.assign(draft, launcher.resetSettings());
+  const next = launcher.resetSettings();
+  Object.assign(draft, next);
+  draft.enabledOptionalMods = Object.fromEntries(
+    launcher.state.catalog.optionalMods.map((m) => [m.id, m.defaultEnabled]),
+  );
+  draft.enabledShaderVariants = Object.fromEntries(
+    launcher.state.catalog.shaderVariants.map((s) => [s.id, s.defaultEnabled]),
+  );
 }
 </script>
 
@@ -141,6 +186,74 @@ function reset() {
         <p class="mt-2 text-xs text-mc-muted">
           Shown in Multiplayer. Quick Play connects straight to this address.
         </p>
+      </section>
+
+      <!-- Optional mods -->
+      <section v-if="optionalMods.length" class="mc-panel p-4">
+        <h2 class="font-pixel pixel-shadow-sm text-xs text-mc-gold">Optional mods</h2>
+        <p class="mt-2 text-xs text-mc-muted">
+          Unchecked mods are kept on disk as <span class="font-mono">.jar.disabled</span>.
+        </p>
+        <ul class="mt-3 flex flex-col gap-2">
+          <li
+            v-for="mod in optionalMods"
+            :key="mod.id"
+            class="flex cursor-pointer items-start gap-2 p-1.5 transition-colors duration-150 hover:bg-mc-panel-2"
+            @click="toggleOptional(mod.id)"
+          >
+            <button
+              type="button"
+              role="checkbox"
+              :aria-checked="!!draft.enabledOptionalMods[mod.id]"
+              class="mc-inset-well mt-0.5 flex size-5 shrink-0 cursor-pointer items-center justify-center"
+              @click.stop="toggleOptional(mod.id)"
+            >
+              <span
+                v-if="draft.enabledOptionalMods[mod.id]"
+                class="size-2.5 bg-mc-gold"
+              />
+            </button>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm text-mc-text">{{ mod.name }}</p>
+              <p class="text-xs text-mc-muted">{{ mod.description }}</p>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Shader presets -->
+      <section v-if="shaderVariants.length" class="mc-panel p-4">
+        <h2 class="font-pixel pixel-shadow-sm text-xs text-mc-gold">Shader presets</h2>
+        <p class="mt-2 text-xs text-mc-muted">
+          Writes Iris settings next to an existing pack (e.g. after Euphoria creates the folder).
+          Never creates or copies shaderpacks.
+        </p>
+        <ul class="mt-3 flex flex-col gap-2">
+          <li
+            v-for="shader in shaderVariants"
+            :key="shader.id"
+            class="flex cursor-pointer items-start gap-2 p-1.5 transition-colors duration-150 hover:bg-mc-panel-2"
+            @click="toggleShader(shader.id)"
+          >
+            <button
+              type="button"
+              role="checkbox"
+              :aria-checked="!!draft.enabledShaderVariants[shader.id]"
+              class="mc-inset-well mt-0.5 flex size-5 shrink-0 cursor-pointer items-center justify-center"
+              @click.stop="toggleShader(shader.id)"
+            >
+              <span
+                v-if="draft.enabledShaderVariants[shader.id]"
+                class="size-2.5 bg-mc-gold"
+              />
+            </button>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm text-mc-text">{{ shader.name }}</p>
+              <p class="text-xs text-mc-muted">{{ shader.description }}</p>
+              <p class="mt-0.5 font-mono text-[10px] text-mc-faint">{{ shader.packName }}</p>
+            </div>
+          </li>
+        </ul>
       </section>
 
       <!-- Java -->

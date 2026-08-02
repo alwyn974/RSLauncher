@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,6 +23,12 @@ pub struct Settings {
     pub server_name: String,
     #[serde(default = "default_server_address")]
     pub server_address: String,
+    /// Optional catalogue mod id → enabled. Missing keys use catalogue defaults.
+    #[serde(default)]
+    pub enabled_optional_mods: HashMap<String, bool>,
+    /// Shader variant id → enabled. Missing keys use catalogue defaults.
+    #[serde(default)]
+    pub enabled_shader_variants: HashMap<String, bool>,
 }
 
 fn default_server_name() -> String {
@@ -41,6 +49,8 @@ impl Default for Settings {
             jvm_args: String::new(),
             server_name: default_server_name(),
             server_address: default_server_address(),
+            enabled_optional_mods: HashMap::new(),
+            enabled_shader_variants: HashMap::new(),
         }
     }
 }

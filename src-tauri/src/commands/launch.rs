@@ -206,7 +206,7 @@ async fn run_launch(
         ),
     );
 
-    let mut instance = modpack::build_instance();
+    let mut instance = modpack::build_instance_with(&settings);
     // game_dirs() is the vanilla run directory (servers.dat lives here).
     servers::ensure_default_server(
         instance.game_dirs(),

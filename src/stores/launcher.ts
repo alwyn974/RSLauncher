@@ -2,7 +2,7 @@
  * Launcher state — backed by Tauri commands/events:
  *
  *   commands: login_with_microsoft, remove_account, set_active_account,
- *             get_settings, save_settings, play, cancel, stop
+ *             get_settings, save_settings, get_catalog, play, cancel, stop
  *   events:   "launch://progress" -> Progress
  *             "auth://device_code" -> { code, url }
  *             "auth://status"     -> { step }
@@ -36,6 +36,31 @@ export interface Settings {
   jvmArgs: string;
   serverName: string;
   serverAddress: string;
+  enabledOptionalMods: Record<string, boolean>;
+  enabledShaderVariants: Record<string, boolean>;
+}
+
+export interface OptionalModInfo {
+  id: string;
+  name: string;
+  description: string;
+  source: string;
+  defaultEnabled: boolean;
+  enabled: boolean;
+}
+
+export interface ShaderVariantInfo {
+  id: string;
+  name: string;
+  description: string;
+  packName: string;
+  defaultEnabled: boolean;
+  enabled: boolean;
+}
+
+export interface Catalog {
+  optionalMods: OptionalModInfo[];
+  shaderVariants: ShaderVariantInfo[];
 }
 
 export interface MemoryInfo {
@@ -108,6 +133,8 @@ const DEFAULT_SETTINGS: Settings = {
   jvmArgs: "",
   serverName: "Eh Zebi",
   serverAddress: "mc.alwyn974.re",
+  enabledOptionalMods: {},
+  enabledShaderVariants: {},
 };
 
 const DEFAULT_MEMORY: MemoryInfo = {
@@ -131,6 +158,7 @@ interface LauncherState {
   accounts: Account[];
   activeAccountId: string | null;
   settings: Settings;
+  catalog: Catalog;
   memory: MemoryInfo;
   view: View;
   loginPending: boolean;
@@ -145,10 +173,17 @@ interface LauncherState {
   ready: boolean;
 }
 
+const EMPTY_CATALOG: Catalog = { optionalMods: [], shaderVariants: [] };
+
 const state = reactive<LauncherState>({
   accounts: [],
   activeAccountId: null,
-  settings: { ...DEFAULT_SETTINGS },
+  settings: {
+    ...DEFAULT_SETTINGS,
+    enabledOptionalMods: {},
+    enabledShaderVariants: {},
+  },
+  catalog: { ...EMPTY_CATALOG },
   memory: { ...DEFAULT_MEMORY },
   view: "play",
   loginPending: false,
@@ -318,9 +353,10 @@ export async function initLauncher() {
     );
 
     try {
-      const [accounts, settings, active, memory, status] = await Promise.all([
+      const [accounts, settings, catalog, active, memory, status] = await Promise.all([
         invoke<Account[]>("list_accounts"),
         invoke<Settings>("get_settings"),
+        invoke<Catalog>("get_catalog"),
         invoke<Account | null>("get_active_account"),
         invoke<MemoryInfo>("get_memory_info"),
         invoke<{ installed: boolean }>("get_instance_status"),
@@ -328,9 +364,12 @@ export async function initLauncher() {
       syncActive(accounts, active);
       state.memory = { ...DEFAULT_MEMORY, ...memory };
       state.installed = status.installed;
+      state.catalog = catalog;
       state.settings = {
         ...DEFAULT_SETTINGS,
         ...settings,
+        enabledOptionalMods: { ...settings.enabledOptionalMods },
+        enabledShaderVariants: { ...settings.enabledShaderVariants },
         ramGb: Math.min(
           Math.max(settings.ramGb ?? state.memory.recommendedGb, state.memory.minGb),
           state.memory.totalGb,
@@ -395,7 +434,13 @@ async function setActiveAccount(id: string) {
 async function saveSettings(next: Settings) {
   try {
     const saved = await invoke<Settings>("save_settings", { settings: next });
-    state.settings = { ...DEFAULT_SETTINGS, ...saved };
+    state.settings = {
+      ...DEFAULT_SETTINGS,
+      ...saved,
+      enabledOptionalMods: { ...saved.enabledOptionalMods },
+      enabledShaderVariants: { ...saved.enabledShaderVariants },
+    };
+    state.catalog = await invoke<Catalog>("get_catalog");
     log("INFO", "launcher", "Settings saved");
   } catch (e) {
     log("ERROR", "launcher", String(e));
@@ -407,7 +452,12 @@ function resetSettings(): Settings {
     Math.max(state.memory.recommendedGb, state.memory.minGb),
     state.memory.totalGb,
   );
-  return { ...DEFAULT_SETTINGS, ramGb };
+  return {
+    ...DEFAULT_SETTINGS,
+    ramGb,
+    enabledOptionalMods: {},
+    enabledShaderVariants: {},
+  };
 }
 
 async function refreshInstallStatus() {
