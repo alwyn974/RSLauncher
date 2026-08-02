@@ -1,0 +1,5 @@
+# Faster linking (https://nnethercote.github.io/perf-book/build-configuration.html#linking).
+# Linux already defaults to lld since Rust 1.90; Windows MSVC still benefits explicitly.
+
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld"

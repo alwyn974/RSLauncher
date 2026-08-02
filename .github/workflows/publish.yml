@@ -97,6 +97,9 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
@@ -114,6 +117,11 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUSTC_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: "true"
+          # Cleaner logs; release profile already disables incremental.
+          CARGO_INCREMENTAL: "0"
+          CARGO_TERM_COLOR: always
         with:
           # Prefer the pushed git tag so each release is a new GitHub Release.
           # Falls back to project version for workflow_dispatch on a branch.

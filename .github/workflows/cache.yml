@@ -46,6 +46,9 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
@@ -61,4 +64,9 @@ jobs:
       - name: Release build (warm compile cache)
         # Full tauri build matches publish compile units better than cargo check.
         # No GitHub release - cache only.
+        env:
+          RUSTC_WRAPPER: sccache
+          SCCACHE_GHA_ENABLED: "true"
+          CARGO_INCREMENTAL: "0"
+          CARGO_TERM_COLOR: always
         run: pnpm tauri build
