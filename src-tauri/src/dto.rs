@@ -32,23 +32,24 @@ pub struct Settings {
 }
 
 fn default_server_name() -> String {
-    crate::config::DEFAULT_SERVER_NAME.to_string()
+    crate::modpack_profile::get().server.name.clone()
 }
 
 fn default_server_address() -> String {
-    crate::config::DEFAULT_SERVER_ADDRESS.to_string()
+    crate::modpack_profile::get().server.address.clone()
 }
 
 impl Default for Settings {
     fn default() -> Self {
+        let profile = crate::modpack_profile::get();
         Self {
-            ram_gb: crate::config::FALLBACK_RECOMMENDED_RAM_GB,
+            ram_gb: profile.fallback_ram_gb,
             width: 1024,
             height: 768,
             fullscreen: false,
             jvm_args: String::new(),
-            server_name: default_server_name(),
-            server_address: default_server_address(),
+            server_name: profile.server.name.clone(),
+            server_address: profile.server.address.clone(),
             enabled_optional_mods: HashMap::new(),
             enabled_shader_variants: HashMap::new(),
         }

@@ -4,13 +4,14 @@
  * PLAY / QUICK PLAY buttons in the middle, progress panel docked at the bottom.
  */
 import { computed } from "vue";
-import { launcher, MODPACK } from "../stores/launcher";
+import { launcher } from "../stores/launcher";
 import AccountSwitcher from "../components/AccountSwitcher.vue";
 import PixelButton from "../components/PixelButton.vue";
 import PixelIcon from "../components/PixelIcon.vue";
 import ProgressPanel from "../components/ProgressPanel.vue";
 import SignInStatus from "../components/SignInStatus.vue";
 
+const modpack = computed(() => launcher.state.catalog.modpack);
 const stage = computed(() => launcher.state.progress.stage);
 const running = computed(() => stage.value === "running");
 const disabled = computed(() => launcher.busy.value || running.value);
@@ -66,10 +67,12 @@ function onQuickPlay() {
     <main class="flex min-h-0 flex-1 flex-col items-center justify-center gap-6">
       <div class="text-center">
         <h1 class="font-pixel pixel-shadow text-3xl tracking-wide text-white">
-          {{ MODPACK.name }}
+          {{ modpack.name }}
         </h1>
         <p class="mt-3 inline-block border-2 border-mc-border bg-mc-panel px-2 py-1 font-mono text-xs text-mc-gold">
-          {{ MODPACK.version }} · Minecraft {{ MODPACK.minecraft }} · {{ MODPACK.loader }} · {{ MODPACK.modCount }} mods
+          <template v-if="modpack.version">{{ modpack.version }} · </template>
+          Minecraft {{ modpack.minecraft }} · {{ modpack.loader }} {{ modpack.loaderVersion }}
+          <template v-if="modpack.modCount != null"> · {{ modpack.modCount }} mods</template>
         </p>
       </div>
 

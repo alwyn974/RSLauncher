@@ -1,8 +1,12 @@
 use sysinfo::System;
 
-use crate::config;
 use crate::dto::MemoryInfo;
 use crate::modpack_meta;
+use crate::modpack_profile;
+
+fn min_ram_gb() -> u32 {
+    modpack_profile::get().min_ram_gb
+}
 
 /// Total physical RAM in whole GiB (floored).
 pub fn total_gb() -> u32 {
@@ -10,15 +14,16 @@ pub fn total_gb() -> u32 {
     sys.refresh_memory();
     let bytes = sys.total_memory();
     let gib = (bytes / (1024 * 1024 * 1024)) as u32;
-    gib.max(config::MIN_RAM_GB)
+    gib.max(min_ram_gb())
 }
 
 fn build_info(recommended_gb: u32) -> MemoryInfo {
     let total_gb = total_gb();
+    let min = min_ram_gb();
     MemoryInfo {
         total_gb,
-        recommended_gb: recommended_gb.min(total_gb).max(config::MIN_RAM_GB),
-        min_gb: config::MIN_RAM_GB,
+        recommended_gb: recommended_gb.min(total_gb).max(min),
+        min_gb: min,
     }
 }
 
@@ -34,7 +39,7 @@ pub async fn info_resolved() -> MemoryInfo {
 
 pub fn clamp_ram_gb(ram_gb: u32) -> u32 {
     let max = total_gb();
-    ram_gb.clamp(config::MIN_RAM_GB, max)
+    ram_gb.clamp(min_ram_gb(), max)
 }
 
 pub fn default_ram_gb() -> u32 {

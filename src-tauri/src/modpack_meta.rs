@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
 use crate::config;
+use crate::modpack_profile::{self, PackProvider};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CachedRecommendedRam {
@@ -37,8 +38,16 @@ fn cache_path() -> PathBuf {
 }
 
 fn mb_to_gb(mb: u32) -> u32 {
-    // CurseForge stores MB (ATM10 7.2 = 8196 ≈ 8 GiB).
+    // CurseForge stores MB (e.g. 8196 ≈ 8 GiB).
     ((mb as f64) / 1024.0).round().max(1.0) as u32
+}
+
+fn pack_file_id() -> Option<u32> {
+    let profile = modpack_profile::get();
+    match profile.pack.provider {
+        PackProvider::Curseforge => profile.pack.file_id,
+        PackProvider::Modrinth => None,
+    }
 }
 
 pub fn has_cache() -> bool {
@@ -49,41 +58,51 @@ pub fn has_cache() -> bool {
 pub fn recommended_gb_cached() -> u32 {
     read_cache()
         .map(|c| mb_to_gb(c.recommended_ram_mb))
-        .unwrap_or(config::FALLBACK_RECOMMENDED_RAM_GB)
+        .unwrap_or_else(|| modpack_profile::get().fallback_ram_gb)
 }
 
 fn read_cache() -> Option<CachedRecommendedRam> {
+    let file_id = pack_file_id()?;
     let path = cache_path();
     let raw = fs::read_to_string(path).ok()?;
     let cached: CachedRecommendedRam = serde_json::from_str(&raw).ok()?;
-    if cached.file_id != config::ATM10_FILE_ID || cached.recommended_ram_mb == 0 {
+    if cached.file_id != file_id || cached.recommended_ram_mb == 0 {
         return None;
     }
     Some(cached)
 }
 
 fn write_cache(mb: u32) -> Result<(), String> {
+    let file_id = pack_file_id().ok_or_else(|| "not a CurseForge pack".to_string())?;
     let path = cache_path();
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let cached = CachedRecommendedRam {
-        file_id: config::ATM10_FILE_ID,
+        file_id,
         recommended_ram_mb: mb,
     };
     let raw = serde_json::to_string_pretty(&cached).map_err(|e| e.to_string())?;
     fs::write(path, raw).map_err(|e| e.to_string())
 }
 
-fn forgecdn_url() -> String {
-    let id = config::ATM10_FILE_ID.to_string();
+fn forgecdn_url() -> Option<String> {
+    let profile = modpack_profile::get();
+    let (project_id, file_id, file_name) = profile.curseforge_pack()?;
+    let _ = project_id;
+    let id = file_id.to_string();
     let (prefix, suffix) = if id.len() >= 4 {
         (&id[..4], &id[4..])
     } else {
         (id.as_str(), "")
     };
-    let name = config::ATM10_FILE_NAME.replace(' ', "%20");
-    format!("https://edge.forgecdn.net/files/{prefix}/{suffix}/{name}")
+    let name = file_name.replace(' ', "%20");
+    if name.is_empty() {
+        return None;
+    }
+    Some(format!(
+        "https://edge.forgecdn.net/files/{prefix}/{suffix}/{name}"
+    ))
 }
 
 fn parse_recommended_mb_from_zip(bytes: &[u8]) -> Result<u32, String> {
@@ -104,6 +123,10 @@ fn parse_recommended_mb_from_zip(bytes: &[u8]) -> Result<u32, String> {
 
 /// Ensure cache is populated from the CurseForge pack zip (once per file id).
 pub async fn ensure_recommended_ram() -> u32 {
+    if pack_file_id().is_none() {
+        return modpack_profile::get().fallback_ram_gb;
+    }
+
     if let Some(cached) = read_cache() {
         return mb_to_gb(cached.recommended_ram_mb);
     }
@@ -120,13 +143,15 @@ pub async fn ensure_recommended_ram() -> u32 {
             let _ = write_cache(mb);
             mb_to_gb(mb)
         }
-        Err(_) => config::FALLBACK_RECOMMENDED_RAM_GB,
+        Err(_) => modpack_profile::get().fallback_ram_gb,
     }
 }
 
 async fn fetch_recommended_mb() -> Result<u32, String> {
-    // Prefer official download URL when a CurseForge API key is available.
-    let url = resolve_download_url().await.unwrap_or_else(|_| forgecdn_url());
+    let url = match resolve_download_url().await {
+        Ok(url) => url,
+        Err(_) => forgecdn_url().ok_or_else(|| "no forgecdn URL".to_string())?,
+    };
 
     let response = HTTP_CLIENT
         .get(&url)
@@ -142,15 +167,16 @@ async fn fetch_recommended_mb() -> Result<u32, String> {
 }
 
 async fn resolve_download_url() -> Result<String, String> {
+    let profile = modpack_profile::get();
+    let (project_id, file_id, _) = profile
+        .curseforge_pack()
+        .ok_or_else(|| "not a CurseForge pack".to_string())?;
     let key = config::curseforge_api_key()
         .ok_or_else(|| "CurseForge API key missing from this build".to_string())?;
     lighty_launcher::mods::curseforge::set_api_key(key);
-    let file = lighty_launcher::mods::curseforge::fetch_pinned_file(
-        config::ATM10_PROJECT_ID,
-        config::ATM10_FILE_ID,
-    )
-    .await
-    .map_err(|e| e.to_string())?;
+    let file = lighty_launcher::mods::curseforge::fetch_pinned_file(project_id, file_id)
+        .await
+        .map_err(|e| e.to_string())?;
     file.download_url
         .ok_or_else(|| "CurseForge file has no downloadUrl".into())
 }

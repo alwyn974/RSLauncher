@@ -33,11 +33,13 @@ tauri-plugin-window-state = "2.4.1"
 tauri-plugin-process = "2.3.1"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
+toml = "1.1.4+spec-1.1.0"
+include_dir = "0.7.4"
 log = "0.4.33"
 
 # `tracing` enables Lighty's trace_* macros; its `log` feature forwards them
 # into the `log` facade that tauri-plugin-log installs (no tracing-subscriber).
-lighty-launcher = { version = "26.5.12", features = ["neoforge", "lighty_updater", "all-mods", "events", "keyring", "tracing"] }
+lighty-launcher = { version = "26.5.12", features = ["all-loaders", "lighty_updater", "all-mods", "events", "keyring", "tracing"] }
 tokio = { version = "1.53.1", features = ["full"] }
 anyhow = "1.0.104"
 thiserror = "2.0.19"

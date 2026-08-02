@@ -1,0 +1,146 @@
+# Modpack profile — baked into the launcher at compile time.
+
+instance_name = "ATM10"
+# UI label (Play screen). Defaults to instance_name if omitted.
+display_name = "All the Mods 10"
+display_version = "7.2"
+# Cosmetic mod count shown in the UI (optional).
+mod_count = 482
+
+minecraft = "1.21.1"
+# fabric | quilt | forge | neoforge | vanilla
+loader = "neoforge"
+loader_version = "21.1.241"
+fallback_ram_gb = 8
+min_ram_gb = 2
+
+[pack]
+# CurseForge: All the Mods 10 — https://www.curseforge.com/minecraft/modpacks/all-the-mods-10/files/8469481
+provider = "curseforge"
+project_id = 925200
+file_id = 8469481
+file_name = "All the Mods 10-7.2.zip"
+# Modrinth alternative:
+# provider = "modrinth"
+# project = "slug-or-id"
+# version = "versionId"
+
+[server]
+name = "Eh Zebi"
+address = "mc.alwyn974.re"
+
+# --- Always installed extras -------------------------------------------------
+
+[[required_curseforge]]
+project_id = 676721
+file_id = 8240058
+# create-aeronautics
+
+[[required_curseforge]]
+project_id = 1312371
+file_id = 8263584
+# sable
+
+[[required_curseforge]]
+project_id = 1528764
+file_id = 8464450
+# create-aeronautics-climbable-ropes
+
+[[required_curseforge]]
+project_id = 1524471
+file_id = 8404634
+# waystones-sable
+
+[[required_curseforge]]
+project_id = 1532334
+file_id = 8249093
+# create-aeronautics-x-curios-api-compat
+
+[[required_curseforge]]
+project_id = 1529882
+file_id = 8368780
+# create-aeronautics-throwable-rope-connector
+
+[[required_curseforge]]
+project_id = 1521213
+file_id = 8002670
+# create-aeronautics-portable-engine-liquid-fuel
+
+[[required_curseforge]]
+project_id = 1519765
+file_id = 7968280
+# create-tracks
+
+[[required_curseforge]]
+project_id = 1514529
+file_id = 8493955
+# aeronautics-claims
+
+# [[required_modrinth]]
+# project = "example"
+# version = "AbCdEfGh"
+
+# --- Optional mods (Settings toggles) ----------------------------------------
+
+[[optional]]
+id = "discord-chat-connect"
+name = "Discord Chat Connect"
+description = "Bridge in-game chat with a Discord channel."
+default_enabled = true
+provider = "curseforge"
+project_id = 1198238
+file_id = 8150396
+
+[[optional]]
+id = "ping-wheel"
+name = "Ping Wheel"
+description = "Ping locations for your teammates."
+default_enabled = true
+provider = "curseforge"
+project_id = 734339
+file_id = 7996932
+
+[[optional]]
+id = "ping-to-map"
+name = "Ping to Map"
+description = "Show pings on the map."
+default_enabled = true
+provider = "curseforge"
+project_id = 1537977
+file_id = 8189365
+
+[[optional]]
+id = "jade-sable-compat"
+name = "Jade × Sable Compat"
+description = "Jade tooltips for Sable content."
+default_enabled = true
+provider = "curseforge"
+project_id = 1530988
+file_id = 8269260
+
+[[optional]]
+id = "obscraft"
+name = "OBSCraft"
+description = "Control OBS Studio from Minecraft (commands / datapacks)."
+default_enabled = false
+provider = "modrinth"
+project = "obscraft"
+version = "Dsw8aSfW"
+
+# --- Shader Iris presets (writes .txt next to an existing pack/folder) -------
+
+[[shaders]]
+id = "complementary-unbound-euphoria"
+name = "Complementary Unbound + Euphoria"
+description = "Applies Iris settings once the Euphoria folder exists."
+pack_name = "ComplementaryUnbound_r5.8.1 + EuphoriaPatches_1.9.3"
+config_file = "ComplementaryUnbound_r5.8.1 + EuphoriaPatches_1.9.3.txt"
+default_enabled = false
+
+[[shaders]]
+id = "complementary-reimagined-euphoria"
+name = "Complementary Reimagined + Euphoria"
+description = "Applies Iris settings once the Euphoria folder exists."
+pack_name = "ComplementaryReimagined_r5.8.1 + EuphoriaPatches_1.9.3"
+config_file = "ComplementaryReimagined_r5.8.1 + EuphoriaPatches_1.9.3.txt"
+default_enabled = false

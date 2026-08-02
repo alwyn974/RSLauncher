@@ -1,38 +1,50 @@
+use lighty_launcher::mods::ModpackSource;
 use lighty_launcher::prelude::*;
 
-use crate::catalog::{
-    self, REQUIRED_CURSEFORGE_MODS, REQUIRED_MODRINTH_MODS,
-};
-use crate::config;
+use crate::catalog;
 use crate::dto::Settings;
+use crate::modpack_profile::{self, PackProvider};
 use crate::settings;
 
-/// Build the ATM10 instance (CurseForge pack + required/optional extras).
+/// Build the configured instance (modpack + required/optional extras).
 pub fn build_instance() -> VersionBuilder<Loader> {
     let settings = settings::load().unwrap_or_default();
     build_instance_with(&settings)
 }
 
 pub fn build_instance_with(settings: &Settings) -> VersionBuilder<Loader> {
-    let mut mods = VersionBuilder::new(
-        config::INSTANCE_NAME,
-        Loader::NeoForge,
-        config::NEOFORGE_VERSION,
-        config::MINECRAFT_VERSION,
-    )
-    .with_mod()
-    .with_curseforge_modpack(config::ATM10_PROJECT_ID, config::ATM10_FILE_ID);
+    let profile = modpack_profile::get();
 
-    let mut cf = REQUIRED_CURSEFORGE_MODS.to_vec();
+    let mut mods = VersionBuilder::new(
+        &profile.instance_name,
+        profile.loader.clone(),
+        &profile.loader_version,
+        &profile.minecraft,
+    )
+    .with_mod();
+
+    match profile.pack.provider {
+        PackProvider::Curseforge => {
+            let project_id = profile.pack.project_id.expect("validated at init");
+            let file_id = profile.pack.file_id.expect("validated at init");
+            mods = mods.with_curseforge_modpack(project_id, file_id);
+        }
+        PackProvider::Modrinth => {
+            let project = profile.pack.project.clone().expect("validated at init");
+            mods = mods.with_modrinth_modpack(ModpackSource::ModrinthPinned {
+                project,
+                version: profile.pack.version.clone(),
+            });
+        }
+    }
+
+    let mut cf = catalog::required_curseforge();
     cf.extend(catalog::enabled_curseforge_optionals(settings));
     if !cf.is_empty() {
         mods = mods.with_curseforge_mods(cf);
     }
 
-    let mut mr: Vec<(String, Option<String>)> = REQUIRED_MODRINTH_MODS
-        .iter()
-        .map(|(id, ver)| ((*id).to_string(), ver.map(|v| v.to_string())))
-        .collect();
+    let mut mr = catalog::required_modrinth();
     mr.extend(catalog::enabled_modrinth_optionals(settings));
     if !mr.is_empty() {
         mods = mods.with_modrinth_mods(mr);

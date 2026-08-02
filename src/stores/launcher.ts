@@ -58,7 +58,18 @@ export interface ShaderVariantInfo {
   enabled: boolean;
 }
 
+export interface ModpackInfo {
+  name: string;
+  version: string;
+  minecraft: string;
+  loader: string;
+  loaderVersion: string;
+  modCount: number | null;
+  instanceName: string;
+}
+
 export interface Catalog {
+  modpack: ModpackInfo;
   optionalMods: OptionalModInfo[];
   shaderVariants: ShaderVariantInfo[];
 }
@@ -116,23 +127,25 @@ export interface DeviceCode {
 
 export type View = "play" | "settings" | "logs";
 
-export const MODPACK = {
-  name: "All the Mods 10",
-  minecraft: "1.21.1",
-  loader: "NeoForge 21.1.241",
-  modCount: 482,
-  version: "7.2",
-} as const;
+const EMPTY_MODPACK: ModpackInfo = {
+  name: "…",
+  version: "",
+  minecraft: "",
+  loader: "",
+  loaderVersion: "",
+  modCount: null,
+  instanceName: "",
+};
 
-/** Fallback until CurseForge `minecraft.recommendedRam` is fetched (ATM10 = 8 GiB). */
+/** Fallback until backend settings load. */
 const DEFAULT_SETTINGS: Settings = {
   ramGb: 8,
   width: 1024,
   height: 768,
   fullscreen: false,
   jvmArgs: "",
-  serverName: "Eh Zebi",
-  serverAddress: "mc.alwyn974.re",
+  serverName: "",
+  serverAddress: "",
   enabledOptionalMods: {},
   enabledShaderVariants: {},
 };
@@ -173,7 +186,11 @@ interface LauncherState {
   ready: boolean;
 }
 
-const EMPTY_CATALOG: Catalog = { optionalMods: [], shaderVariants: [] };
+const EMPTY_CATALOG: Catalog = {
+  modpack: { ...EMPTY_MODPACK },
+  optionalMods: [],
+  shaderVariants: [],
+};
 
 const state = reactive<LauncherState>({
   accounts: [],
@@ -475,7 +492,7 @@ async function play(quickPlay = false) {
   log(
     "INFO",
     "launcher",
-    `${mode}: ${MODPACK.name} ${MODPACK.version} for ${activeAccount.value.username}`,
+    `${mode}: ${state.catalog.modpack.name} ${state.catalog.modpack.version} for ${activeAccount.value.username}`,
   );
   applyProgress({
     ...IDLE_PROGRESS,

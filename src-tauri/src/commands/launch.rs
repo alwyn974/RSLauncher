@@ -197,11 +197,10 @@ async fn run_launch(
         Progress::detail(
             "preparing",
             "Building instance",
-            format!(
-                "{} · NeoForge {}",
-                config::INSTANCE_NAME,
-                config::NEOFORGE_VERSION
-            ),
+            {
+                let p = crate::modpack_profile::get();
+                format!("{} · {}", p.instance_name, p.loader_display())
+            },
             15,
         ),
     );
@@ -217,11 +216,14 @@ async fn run_launch(
     emit_log(
         "INFO",
         "launcher",
-        format!(
-            "Launching {} (NeoForge {}) — install will run if needed",
-            config::INSTANCE_NAME,
-            config::NEOFORGE_VERSION
-        ),
+        {
+            let p = crate::modpack_profile::get();
+            format!(
+                "Launching {} ({}) — install will run if needed",
+                p.instance_name,
+                p.loader_display()
+            )
+        },
     );
     let _ = app.emit(
         "launch://progress",

@@ -8,6 +8,7 @@ mod events;
 mod memory;
 mod modpack;
 mod modpack_meta;
+mod modpack_profile;
 mod optional_content;
 mod servers;
 mod settings;
@@ -77,6 +78,7 @@ fn clamp_main_window_size(app: &tauri::App) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     AppState::init(config::LAUNCHER_NAME).expect("failed to init Lighty AppState");
+    modpack_profile::init();
 
     // Flaky connections: fewer parallel streams, more retries, longer backoff.
     init_downloader_config(DownloaderConfig {

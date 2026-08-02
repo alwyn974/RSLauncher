@@ -10,15 +10,14 @@ use std::time::Duration;
 
 use lighty_launcher::mods::curseforge;
 use lighty_launcher::mods::modrinth;
-use lighty_launcher::prelude::{Loader, ModRequest};
+use lighty_launcher::prelude::ModRequest;
 
 use crate::catalog::{
-    is_optional_mod_enabled, is_shader_variant_enabled, ModSource, OptionalMod, OPTIONAL_MODS,
-    SHADER_VARIANTS,
+    is_optional_mod_enabled, is_shader_variant_enabled, optional_mods, shader_variants,
 };
-use crate::config;
 use crate::dto::Settings;
 use crate::error::AppError;
+use crate::modpack_profile::{self, ModProvider, OptionalModSpec};
 
 /// Enable/disable optional jars and apply/remove shader Iris configs.
 pub async fn sync(game_dir: &Path, settings: &Settings) -> Result<(), AppError> {
@@ -33,8 +32,8 @@ async fn sync_optional_mod_jars(game_dir: &Path, settings: &Settings) -> Result<
         return Ok(());
     }
 
-    for entry in OPTIONAL_MODS {
-        let enabled = is_optional_mod_enabled(settings, entry.id);
+    for entry in optional_mods() {
+        let enabled = is_optional_mod_enabled(settings, &entry.id);
         let jar_name = match resolve_jar_filename(entry).await {
             Ok(name) => name,
             Err(err) => {
@@ -81,13 +80,17 @@ async fn sync_optional_mod_jars(game_dir: &Path, settings: &Settings) -> Result<
     Ok(())
 }
 
-async fn resolve_jar_filename(entry: &OptionalMod) -> Result<String, AppError> {
-    match entry.source {
-        ModSource::CurseForge {
-            project_id,
-            file_id,
-        } => {
-            let file_id = file_id.ok_or_else(|| {
+async fn resolve_jar_filename(entry: &OptionalModSpec) -> Result<String, AppError> {
+    let mc = &modpack_profile::get().minecraft;
+    match entry.provider {
+        ModProvider::Curseforge => {
+            let project_id = entry.project_id.ok_or_else(|| {
+                AppError::msg(format!(
+                    "optional mod {} needs a CurseForge project_id",
+                    entry.id
+                ))
+            })?;
+            let file_id = entry.file_id.ok_or_else(|| {
                 AppError::msg(format!(
                     "optional mod {} needs a pinned CurseForge file_id",
                     entry.id
@@ -98,15 +101,18 @@ async fn resolve_jar_filename(entry: &OptionalMod) -> Result<String, AppError> {
                 .map_err(|e| AppError::msg(format!("CurseForge {project_id}/{file_id}: {e}")))?;
             Ok(file.file_name)
         }
-        ModSource::Modrinth { project, version } => {
+        ModProvider::Modrinth => {
+            let project = entry.project.as_deref().ok_or_else(|| {
+                AppError::msg(format!("optional mod {} needs a Modrinth project", entry.id))
+            })?;
             let request = ModRequest::Modrinth {
                 id_or_slug: project.to_string(),
-                version: version.map(|v| v.to_string()),
+                version: entry.version.clone(),
             };
             let (resolved, _deps) = modrinth::fetch(
                 &request,
-                config::MINECRAFT_VERSION,
-                &Loader::NeoForge,
+                mc,
+                &modpack_profile::get().loader,
                 Duration::from_secs(6 * 60 * 60),
             )
             .await
@@ -128,24 +134,22 @@ async fn resolve_jar_filename(entry: &OptionalMod) -> Result<String, AppError> {
 
 fn ensure_shader_configs(game_dir: &Path, settings: &Settings) -> Result<(), AppError> {
     let shader_dir = game_dir.join("shaderpacks");
-    if SHADER_VARIANTS.is_empty() {
+    let variants = shader_variants();
+    if variants.is_empty() {
         return Ok(());
     }
 
     fs::create_dir_all(&shader_dir)?;
 
-    for variant in SHADER_VARIANTS {
-        let enabled = is_shader_variant_enabled(settings, variant.id);
-        let pack_stem = pack_stem(variant.pack_name);
+    for variant in variants {
+        let enabled = is_shader_variant_enabled(settings, &variant.id);
+        let pack_stem = pack_stem(&variant.pack_name);
         let txt_path = shader_dir.join(format!("{pack_stem}.txt"));
 
-        // Remove bogus zip copies we may have created earlier (Euphoria uses folders).
         remove_bogus_euphoria_zip(&shader_dir, pack_stem);
 
         if enabled {
-            // Iris matches `PackName.txt` to folder `PackName` or `PackName.zip`.
-            // Write even if the pack is not there yet (Euphoria may create it later).
-            fs::write(&txt_path, variant.config_txt)?;
+            fs::write(&txt_path, &variant.config_txt)?;
             if pack_exists_on_disk(&shader_dir, pack_stem) {
                 log::info!(
                     target: "rslauncher",
@@ -185,8 +189,6 @@ fn pack_exists_on_disk(shader_dir: &Path, stem: &str) -> bool {
     shader_dir.join(stem).is_dir() || shader_dir.join(format!("{stem}.zip")).is_file()
 }
 
-/// Older launcher builds copied the base zip to `Name + Euphoria….zip`, which
-/// is invalid and can crash the game. Drop those if present.
 fn remove_bogus_euphoria_zip(shader_dir: &Path, stem: &str) {
     if !stem.contains("Euphoria") {
         return;
