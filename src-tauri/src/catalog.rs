@@ -39,7 +39,7 @@ pub struct ShaderVariant {
 
 /// Always installed extras (Create Aeronautics stack, etc.).
 pub const REQUIRED_CURSEFORGE_MODS: &[(u32, Option<u32>)] = &[
-    (676721, Some(8240058)),   // create-aeronautics
+    (676721,  Some(8240058)),  // create-aeronautics
     (1312371, Some(8263584)),  // sable
     (1528764, Some(8464450)),  // create-aeronautics-climbable-ropes
     (1524471, Some(8404634)),  // waystones-sable
@@ -48,6 +48,15 @@ pub const REQUIRED_CURSEFORGE_MODS: &[(u32, Option<u32>)] = &[
     (1521213, Some(8002670)),  // create-aeronautics-portable-engine-liquid-fuel
     (1519765, Some(7968280)),  // create-tracks
     (1514529, Some(8493955)),  // aeronautics-claims
+    (1533137, Some(8268622)),  // create-deep-seas
+    (1559550, Some(8427886)),  // create-aeronautics-shield-generator-force-field
+    (1537945, Some(8523257)),  // create-aeronautics-gadgets-and-gizmos
+    (1537420, Some(8348610)),  // create-aeronautics-automated-logistics
+    (1526820, Some(8549361)),  // aeronautics-camera-sync
+    (646668,  Some(8303106)),  // create-big-cannons
+    (1279407, Some(7587771)),  // ritchies-projectile-library
+    (1522736, Some(8496246)),  // create-propulsion-simulated
+    (1522473, Some(8562945)),  // create-aeroworks
 ];
 
 pub const REQUIRED_MODRINTH_MODS: &[(&str, Option<&str>)] = &[];
