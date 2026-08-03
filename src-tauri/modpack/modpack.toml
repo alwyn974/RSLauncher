@@ -3,7 +3,7 @@
 instance_name = "ATM10"
 # UI label (Play screen). Defaults to instance_name if omitted.
 display_name = "All the Mods 10"
-display_version = "7.2"
+display_version = "7.3"
 
 minecraft = "1.21.1"
 # fabric | quilt | forge | neoforge | vanilla
@@ -16,8 +16,8 @@ min_ram_gb = 2
 # CurseForge: All the Mods 10 - https://www.curseforge.com/minecraft/modpacks/all-the-mods-10/files/8469481
 provider = "curseforge"
 project_id = 925200
-file_id = 8469481
-file_name = "All the Mods 10-7.2.zip"
+file_id = 8558519
+file_name = "All the Mods 10-7.3.zip"
 # Modrinth alternative:
 # provider = "modrinth"
 # project = "slug-or-id"
@@ -162,6 +162,15 @@ project_id = 1530988
 file_id = 8269260
 
 [[optional]]
+id = "sharedatlasjm"
+name = "SharedAtlasJM"
+description = "Explore together and see the areas discovered by other players directly on your JourneyMap."
+default_enabled = true
+provider = "curseforge"
+project_id = 1585206
+file_id = 8305574
+
+[[optional]]
 id = "obscraft"
 name = "OBSCraft"
 description = "Control OBS Studio from Minecraft (commands / datapacks)."
@@ -178,7 +187,7 @@ name = "Complementary Unbound + Euphoria"
 description = "Applies Iris settings once the Euphoria folder exists."
 pack_name = "ComplementaryUnbound_r5.8.1 + EuphoriaPatches_1.9.3"
 config_file = "ComplementaryUnbound_r5.8.1 + EuphoriaPatches_1.9.3.txt"
-default_enabled = false
+default_enabled = true
 
 [[shaders]]
 id = "complementary-reimagined-euphoria"
@@ -186,4 +195,4 @@ name = "Complementary Reimagined + Euphoria"
 description = "Applies Iris settings once the Euphoria folder exists."
 pack_name = "ComplementaryReimagined_r5.8.1 + EuphoriaPatches_1.9.3"
 config_file = "ComplementaryReimagined_r5.8.1 + EuphoriaPatches_1.9.3.txt"
-default_enabled = false
+default_enabled = true
