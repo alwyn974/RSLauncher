@@ -1,17 +1,19 @@
-//! Reconcile `mods/` after Lighty install.
+//! Reconcile instance files after Lighty install.
 //!
-//! Two Lighty gaps this covers:
+//! Lighty gaps this covers:
 //! 1. Version bumps leave old jars on disk (orphan cleanup).
 //! 2. Pack `overrides/mods/*.jar` are extracted *before* manifest downloads and
 //!    with SkipWarn — ATM ships a fixed CC-Tweaked in overrides while the
 //!    manifest still lists an older file → duplicate modId / wrong version wins.
+//! 3. SkipWarn also keeps stale override configs (e.g. `bcc-common.toml` still
+//!    saying 7.2 after a 7.3 bump). On pack file_id change we re-apply the
+//!    whole overrides tree with overwrite.
 //!
-//! We re-apply override jars (overwrite), drop any other jar sharing their
-//! modId, then delete jars outside the keep set (pack + overrides + extras).
+//! Flow: re-apply overrides → drop conflicting modIds → orphan jar cleanup.
 
 use std::collections::HashSet;
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use lighty_launcher::core::calculate_sha1_bytes;
@@ -33,7 +35,7 @@ struct CachedMod {
     path: Option<String>,
 }
 
-/// Apply pack override jars, dedupe modIds, then remove orphans.
+/// Apply pack overrides, dedupe modIds, then remove orphan jars.
 pub async fn remove_orphans(game_dir: &Path, _settings: &Settings) -> Result<(), AppError> {
     let mods_dir = game_dir.join("mods");
     fs::create_dir_all(&mods_dir)?;
@@ -54,15 +56,34 @@ pub async fn remove_orphans(game_dir: &Path, _settings: &Settings) -> Result<(),
         }
     };
 
+    let pack_key = current_pack_key();
+    let stamp_path = game_dir.join(".rslauncher-pack-id");
+    let pack_changed = fs::read_to_string(&stamp_path)
+        .map(|s| s.trim() != pack_key)
+        .unwrap_or(true);
+
     let override_jars = tokio::task::spawn_blocking({
         let archive = archive.clone();
-        let mods_dir = mods_dir.clone();
-        move || apply_override_mods(&archive, &mods_dir)
+        let game_dir = game_dir.to_path_buf();
+        move || apply_pack_overrides(&archive, &game_dir, pack_changed)
     })
     .await
-    .map_err(|e| AppError::msg(format!("override mods task panicked: {e}")))??;
+    .map_err(|e| AppError::msg(format!("override apply task panicked: {e}")))??;
 
-    if !override_jars.is_empty() {
+    if pack_changed {
+        if let Err(err) = fs::write(&stamp_path, &pack_key) {
+            log::warn!(
+                target: "rslauncher",
+                "[mods] could not write pack stamp {}: {err}",
+                stamp_path.display()
+            );
+        } else {
+            log::info!(
+                target: "rslauncher",
+                "[mods] pack overrides refreshed for {pack_key}"
+            );
+        }
+    } else if !override_jars.is_empty() {
         log::info!(
             target: "rslauncher",
             "[mods] applied {} override jar(s)",
@@ -244,14 +265,37 @@ fn jar_name_under_mods(entry: &CachedMod) -> Option<String> {
     }
 }
 
-/// Copy `overrides/mods/*.jar` (and mrpack client-overrides) into `mods_dir`, overwriting.
-fn apply_override_mods(archive: &Path, mods_dir: &Path) -> Result<HashSet<String>, AppError> {
+fn current_pack_key() -> String {
+    let profile = modpack_profile::get();
+    match profile.pack.provider {
+        PackProvider::Curseforge => format!(
+            "curseforge:{}:{}",
+            profile.pack.project_id.unwrap_or(0),
+            profile.pack.file_id.unwrap_or(0)
+        ),
+        PackProvider::Modrinth => format!(
+            "modrinth:{}:{}",
+            profile.pack.project.as_deref().unwrap_or(""),
+            profile.pack.version.as_deref().unwrap_or("latest")
+        ),
+    }
+}
+
+/// When `full` is true (pack file_id changed), overwrite the whole overrides
+/// tree. Otherwise only refresh `overrides/mods/*.jar` (cheap path).
+fn apply_pack_overrides(
+    archive: &Path,
+    game_dir: &Path,
+    full: bool,
+) -> Result<HashSet<String>, AppError> {
     let file = fs::File::open(archive)
         .map_err(|e| AppError::msg(format!("open pack archive {}: {e}", archive.display())))?;
     let mut zip = ZipArchive::new(file)
         .map_err(|e| AppError::msg(format!("read pack archive {}: {e}", archive.display())))?;
 
-    let mut applied = HashSet::new();
+    let mut override_jars = HashSet::new();
+    let mut written = 0u32;
+
     for i in 0..zip.len() {
         let mut entry = zip
             .by_index(i)
@@ -259,32 +303,62 @@ fn apply_override_mods(archive: &Path, mods_dir: &Path) -> Result<HashSet<String
         if entry.is_dir() {
             continue;
         }
-        let Some(name) = override_mods_jar_name(entry.name()) else {
+        let Some(rel) = override_rel_path(entry.name()) else {
             continue;
         };
-        let dest = mods_dir.join(&name);
+
+        let is_mod_jar = rel.starts_with("mods/")
+            && !rel[5..].contains('/')
+            && rel.to_ascii_lowercase().ends_with(".jar");
+
+        if !full && !is_mod_jar {
+            continue;
+        }
+
+        let dest = game_dir.join(&rel);
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent).map_err(|e| {
+                AppError::msg(format!("mkdir {}: {e}", parent.display()))
+            })?;
+        }
         let mut out = fs::File::create(&dest).map_err(|e| {
             AppError::msg(format!("write override {}: {e}", dest.display()))
         })?;
         std::io::copy(&mut entry, &mut out).map_err(|e| {
             AppError::msg(format!("extract override {}: {e}", dest.display()))
         })?;
-        log::info!(target: "rslauncher", "[mods] override → {name}");
-        applied.insert(name);
+        out.flush().ok();
+        written += 1;
+
+        if is_mod_jar {
+            let jar_name = rel.trim_start_matches("mods/").to_string();
+            log::info!(target: "rslauncher", "[mods] override jar → {jar_name}");
+            override_jars.insert(jar_name);
+        }
     }
-    Ok(applied)
+
+    if full {
+        log::info!(
+            target: "rslauncher",
+            "[mods] wrote {written} override file(s) from pack archive"
+        );
+    }
+
+    Ok(override_jars)
 }
 
-fn override_mods_jar_name(entry_name: &str) -> Option<String> {
+fn override_rel_path(entry_name: &str) -> Option<String> {
     let normalized = entry_name.replace('\\', "/");
-    for prefix in ["overrides/mods/", "client-overrides/mods/"] {
+    for prefix in ["overrides/", "client-overrides/"] {
         if let Some(rest) = normalized.strip_prefix(prefix) {
-            if rest.is_empty() || rest.contains('/') {
+            if rest.is_empty() || rest.ends_with('/') {
                 return None;
             }
-            if rest.to_ascii_lowercase().ends_with(".jar") {
-                return Some(rest.to_string());
+            // Zip-slip guard.
+            if rest.split('/').any(|p| p == "..") {
+                return None;
             }
+            return Some(rest.to_string());
         }
     }
     None

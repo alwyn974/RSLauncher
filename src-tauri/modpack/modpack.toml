@@ -13,7 +13,7 @@ fallback_ram_gb = 8
 min_ram_gb = 2
 
 [pack]
-# CurseForge: All the Mods 10 - https://www.curseforge.com/minecraft/modpacks/all-the-mods-10/files/8469481
+# CurseForge: All the Mods 10 - https://www.curseforge.com/minecraft/modpacks/all-the-mods-10/files/8558519
 provider = "curseforge"
 project_id = 925200
 file_id = 8558519
