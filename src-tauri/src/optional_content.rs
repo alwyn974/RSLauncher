@@ -21,6 +21,13 @@ use crate::modpack_profile::{self, ModProvider, OptionalModSpec};
 
 /// Enable/disable optional jars and apply/remove shader Iris configs.
 pub async fn sync(game_dir: &Path, settings: &Settings) -> Result<(), AppError> {
+    // Drop jars that left the pack before toggling optionals.
+    if let Err(err) = crate::mods_cleanup::remove_orphans(game_dir, settings).await {
+        log::warn!(
+            target: "rslauncher",
+            "[mods] orphan cleanup failed: {err}"
+        );
+    }
     sync_optional_mod_jars(game_dir, settings).await?;
     ensure_shader_configs(game_dir, settings)?;
     Ok(())
@@ -80,7 +87,7 @@ async fn sync_optional_mod_jars(game_dir: &Path, settings: &Settings) -> Result<
     Ok(())
 }
 
-async fn resolve_jar_filename(entry: &OptionalModSpec) -> Result<String, AppError> {
+pub(crate) async fn resolve_jar_filename(entry: &OptionalModSpec) -> Result<String, AppError> {
     let mc = &modpack_profile::get().minecraft;
     match entry.provider {
         ModProvider::Curseforge => {

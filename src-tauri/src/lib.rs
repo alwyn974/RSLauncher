@@ -9,6 +9,7 @@ mod memory;
 mod modpack;
 mod modpack_meta;
 mod modpack_profile;
+mod mods_cleanup;
 mod optional_content;
 mod servers;
 mod settings;
