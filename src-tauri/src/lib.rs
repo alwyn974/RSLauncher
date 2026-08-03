@@ -81,6 +81,22 @@ pub fn run() {
     AppState::init(config::LAUNCHER_NAME).expect("failed to init Lighty AppState");
     modpack_profile::init();
 
+    // After install / NeoForge processors, before JVM spawn: reconcile overrides
+    // + orphan jars + optional toggles. Must not run on the event bridge (that
+    // raced the launcher and left the UI on "Downloading" while the game started).
+    lighty_launcher::_launch::set_pre_launch_hook(|| async {
+        let Ok(settings) = crate::settings::load() else {
+            return;
+        };
+        let instance = crate::modpack::build_instance_with(&settings);
+        if let Err(err) = crate::optional_content::sync(instance.game_dirs(), &settings).await {
+            log::warn!(
+                target: "rslauncher",
+                "[launcher] pre-launch sync failed: {err}"
+            );
+        }
+    });
+
     // Flaky connections: fewer parallel streams, more retries, longer backoff.
     init_downloader_config(DownloaderConfig {
         max_concurrent_downloads: 16,

@@ -1,151 +1,6 @@
---- a/src/installer/ressources/modpack/curseforge.rs
-+++ b/src/installer/ressources/modpack/curseforge.rs
-@@ -11,6 +11,7 @@
- use lighty_core::QueryError;
- use lighty_loaders::types::version_metadata::Mods;
- use lighty_loaders::types::VersionInfo;
-+use lighty_modsloader::curseforge::api::resolve_file_download_url;
- use lighty_modsloader::curseforge::client::{fetch_pinned_file, install_subdir_for};
- use lighty_modsloader::curseforge::client_metadata::HASH_ALGO_SHA1;
- use lighty_modsloader::curseforge::modpack::parse_manifest;
-@@ -53,11 +54,11 @@
-                     fetch_pinned_file(cf_file.project_id, cf_file.file_id),
-                     install_subdir_for(cf_file.project_id, ttl),
-                 )?;
--                let url = resolved.download_url.ok_or_else(|| {
--                    InstallerError::Query(QueryError::ModDistributionForbidden {
--                        id: format!("{}/{}", cf_file.project_id, cf_file.file_id),
--                    })
--                })?;
-+                let url = resolve_file_download_url(
-+                    resolved.id,
-+                    &resolved.file_name,
-+                    resolved.download_url.as_deref(),
-+                );
-                 let sha1 = resolved
-                     .hashes
-                     .iter()
---- a/src/installer/ressources/modpack/pipeline.rs
-+++ b/src/installer/ressources/modpack/pipeline.rs
-@@ -22,8 +22,10 @@
- /// Runs the modpack pipeline for `source` and returns the `Vec<Mods>`
- /// to merge into the version pivot before install.
- ///
--/// Returns `Ok(vec![])` when the marker already matches (idempotent
--/// re-run — nothing to do).
-+/// When a previous run already resolved this pack, returns the **cached
-+/// mod list** so the installer can still verify / re-download missing or
-+/// corrupt files. Returning an empty vec here used to skip verification
-+/// entirely and launch with incomplete packs on flaky networks.
- pub(crate) async fn process<V>(
-     source: &ModpackSource,
-     version: &V,
-@@ -50,16 +52,35 @@
-     tokio::fs::create_dir_all(&cache_dir).await?;
-     let archive_path = cache_dir.join(format!("{url_sha1}.archive"));
-     let marker_path = cache_dir.join(format!("{url_sha1}.installed"));
-+    let mods_cache_path = cache_dir.join(format!("{url_sha1}.mods.json"));
-     let work_dir = cache_dir.join(format!("work-{url_sha1}"));
- 
--    // Idempotence: marker file matches the URL hash means we're done.
-+    // Fast path: reuse the resolved mod list so install can verify files
-+    // without re-hitting CurseForge/Modrinth for every entry.
-     if marker_path.exists() {
-         if let Ok(saved) = tokio::fs::read_to_string(&marker_path).await {
-             if saved.trim() == url_sha1 {
--                lighty_core::trace_info!(
--                    "[Modpack] Already installed (marker matches), skipping"
-+                if let Ok(bytes) = tokio::fs::read(&mods_cache_path).await {
-+                    if let Ok(mods) = serde_json::from_slice::<Vec<Mods>>(&bytes) {
-+                        if !mods.is_empty() {
-+                            lighty_core::trace_info!(
-+                                "[Modpack] Cached mod list ({} entries) - install will verify",
-+                                mods.len()
-+                            );
-+                            #[cfg(feature = "events")]
-+                            if let Some(bus) = event_bus {
-+                                bus.emit(Event::Modloader(ModloaderEvent::ModpackInstalled {
-+                                    name: source_desc.clone(),
-+                                    mods_count: mods.len(),
-+                                }));
-+                            }
-+                            return Ok(mods);
-+                        }
-+                    }
-+                }
-+                lighty_core::trace_warn!(
-+                    "[Modpack] Marker present but mod list cache missing/empty - rebuilding"
-                 );
--                return Ok(Vec::new());
-             }
-         }
-     }
-@@ -98,6 +119,14 @@
-         }));
-     };
- 
-+    // Persist the resolved list BEFORE the marker so a crash between the
-+    // two never leaves us with "installed" + empty verification list.
-+    let mods_json = serde_json::to_vec(&mods).map_err(|e| {
-+        InstallerError::Query(QueryError::Conversion {
-+            message: format!("serialize mod list: {e}"),
-+        })
-+    })?;
-+    tokio::fs::write(&mods_cache_path, &mods_json).await?;
-     tokio::fs::write(&marker_path, &url_sha1).await?;
- 
-     if work_dir.exists() {
---- a/src/installer/verifier.rs
-+++ b/src/installer/verifier.rs
-@@ -12,18 +12,40 @@
- 
- /// Returns whether the file at `path` needs to be (re-)downloaded.
- ///
--/// `true` when missing, zero-byte, or the SHA1 doesn't match.
--pub async fn needs_download(path: &PathBuf, sha1: Option<&String>, name: &str) -> bool {
-+/// `true` when missing, zero-byte, size mismatch, or the SHA1 doesn't match.
-+pub async fn needs_download(
-+    path: &PathBuf,
-+    sha1: Option<&String>,
-+    expected_size: Option<u64>,
-+    name: &str,
-+) -> bool {
-     if !path.exists() {
-         return true;
-     }
- 
-+    let Ok(meta) = fs::metadata(path).await else {
-+        return true;
-+    };
-+
-     // Zero-byte files are stale artifacts of failed downloads.
--    if let Ok(meta) = fs::metadata(path).await {
--        if meta.len() == 0 {
-+    if meta.len() == 0 {
-+        lighty_core::trace_warn!(
-+            "[Installer] Zero-byte cached file for {}, re-downloading...",
-+            name
-+        );
-+        let _ = fs::remove_file(path).await;
-+        return true;
-+    }
-+
-+    // Truncated downloads on flaky networks often leave a non-zero but
-+    // incomplete file. Catch those even when SHA1 is unavailable.
-+    if let Some(expected) = expected_size {
-+        if meta.len() != expected {
-             lighty_core::trace_warn!(
--                "[Installer] Zero-byte cached file for {}, re-downloading...",
--                name
-+                "[Installer] Size mismatch for {} (got {}, expected {}), re-downloading...",
-+                name,
-+                meta.len(),
-+                expected
-             );
-             let _ = fs::remove_file(path).await;
-             return true;
---- a/src/installer/downloader.rs
-+++ b/src/installer/downloader.rs
+diff -ruN lighty-launch-26.5.12/src/installer/downloader.rs lighty-launch-26.5.12/src/installer/downloader.rs
+--- lighty-launch-26.5.12/src/installer/downloader.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/installer/downloader.rs	2026-08-02 21:59:46.444827658 +0400
 @@ -70,7 +70,27 @@
      dest: &PathBuf,
      #[cfg(feature = "events")] event_bus: Option<&EventBus>,
@@ -247,84 +102,81 @@
      Ok(())
  }
  
---- a/src/installer/ressources/asset_partition.rs
-+++ b/src/installer/ressources/asset_partition.rs
-@@ -64,7 +64,14 @@
-             lighty_core::mkdir!(dir);
-         }
+diff -ruN lighty-launch-26.5.12/src/installer/processors/forge_install.rs lighty-launch-26.5.12/src/installer/processors/forge_install.rs
+--- lighty-launch-26.5.12/src/installer/processors/forge_install.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/installer/processors/forge_install.rs	2026-08-03 18:29:55.974348076 +0400
+@@ -99,6 +99,17 @@
+     Ok(())
+ }
  
--        if needs_download(&target, entry.sha1.as_ref(), &entry.name).await {
-+        if needs_download(
-+            &target,
-+            entry.sha1.as_ref(),
-+            entry.size,
-+            &entry.name,
-+        )
-+        .await
-+        {
-             bytes += entry.size.unwrap_or(0);
-             tasks.push((url.clone(), target));
-         }
---- a/src/installer/ressources/libraries.rs
-+++ b/src/installer/ressources/libraries.rs
-@@ -32,7 +32,7 @@
- 
-         let path = parent_path.join(path_str);
- 
--        if needs_download(&path, lib.sha1.as_ref(), &lib.name).await {
-+        if needs_download(&path, lib.sha1.as_ref(), lib.size, &lib.name).await {
-             tasks.push((url.clone(), path));
-         }
++/// True when NeoForge processor outputs required at runtime are on disk.
++///
++/// Without these jars FML never registers the `minecraft` / `neoforge` mod IDs.
++#[cfg(feature = "neoforge")]
++fn neoforge_runtime_artifacts_present(libraries_dir: &std::path::Path, loader_version: &str) -> bool {
++    let base = libraries_dir.join("net/neoforged/neoforge").join(loader_version);
++    let client = base.join(format!("neoforge-{loader_version}-client.jar"));
++    let universal = base.join(format!("neoforge-{loader_version}-universal.jar"));
++    client.is_file() && universal.is_file()
++}
++
+ /// Runs the NeoForge install processors.
+ ///
+ /// Requires that the install_profile libraries are already on disk.
+@@ -121,16 +132,29 @@
+         });
      }
---- a/src/installer/ressources/natives.rs
-+++ b/src/installer/ressources/natives.rs
-@@ -38,7 +38,7 @@
  
-         let jar_path = libraries_path.join(path_str);
- 
--        if needs_download(&jar_path, native.sha1.as_ref(), &native.name).await {
-+        if needs_download(&jar_path, native.sha1.as_ref(), native.size, &native.name).await {
-             download_tasks.push((url.clone(), jar_path.clone()));
-         }
- 
---- a/src/installer/ressources/client.rs
-+++ b/src/installer/ressources/client.rs
-@@ -21,7 +21,14 @@
-     let url = client.url.as_ref()?.clone();
-     let client_path = version.game_dirs().join(format!("{}.jar", version.name()));
- 
--    if needs_download(&client_path, client.sha1.as_ref(), "Client JAR").await {
-+    if needs_download(
-+        &client_path,
-+        client.sha1.as_ref(),
-+        client.size,
-+        "Client JAR",
-+    )
-+    .await
-+    {
-         Some((url, client_path))
-     } else {
-         None
---- a/src/installer/ressources/assets.rs
-+++ b/src/installer/ressources/assets.rs
-@@ -36,7 +36,14 @@
++    let libraries_dir = version.game_dirs().join("libraries");
++    let loader_version = version.loader_version().to_string();
++    let artifacts_ok = neoforge_runtime_artifacts_present(&libraries_dir, &loader_version);
++
+     let installer_url = build_installer_url(version);
+     let marker_path = processors_marker_path(version, ".neoforge");
+     if let Some(expected_sha1) = fetch_maven_sha1(&installer_url).await {
+         if let Ok(existing) = std::fs::read_to_string(&marker_path) {
+             if existing.trim() == expected_sha1 {
++                if artifacts_ok {
++                    lighty_core::trace_info!(
++                        loader = "neoforge",
++                        "Processors already executed for this installer, skipping"
++                    );
++                    return Ok(());
++                }
++                // Marker alone is not enough: a wiped/partial libraries tree
++                // must force a re-run or every mod reports neoforge/minecraft MISSING.
+                 lighty_core::trace_info!(
+                     loader = "neoforge",
+-                    "Processors already executed for this installer, skipping"
++                    "Processors marker present but runtime jars missing — re-running"
+                 );
+-                return Ok(());
++                let _ = std::fs::remove_file(&marker_path);
              }
-         };
- 
--        if needs_download(&path, Some(&asset.hash), &asset.hash).await {
-+        if needs_download(
-+            &path,
-+            Some(&asset.hash),
-+            Some(asset.size),
-+            &asset.hash,
-+        )
-+        .await
-+        {
-             tasks.push((url.clone(), path));
          }
      }
---- a/src/installer/processors/processor.rs
-+++ b/src/installer/processors/processor.rs
+@@ -145,6 +169,18 @@
+     )
+     .await?;
+ 
++    if !neoforge_runtime_artifacts_present(&libraries_dir, &loader_version) {
++        return Err(QueryError::Conversion {
++            message: format!(
++                "NeoForge processors finished but runtime jars are still missing under {}",
++                libraries_dir
++                    .join("net/neoforged/neoforge")
++                    .join(&loader_version)
++                    .display()
++            ),
++        });
++    }
++
+     // Same as Forge: marker failure must surface, not be lost.
+     if let Some(expected_sha1) = fetch_maven_sha1(&installer_url).await {
+         std::fs::write(&marker_path, expected_sha1).map_err(|e| QueryError::Conversion {
+diff -ruN lighty-launch-26.5.12/src/installer/processors/processor.rs lighty-launch-26.5.12/src/installer/processors/processor.rs
+--- lighty-launch-26.5.12/src/installer/processors/processor.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/installer/processors/processor.rs	2026-08-02 21:59:46.445189856 +0400
 @@ -436,17 +436,29 @@
          "Processor configuration prepared"
      );
@@ -361,8 +213,239 @@
  
      if !output.status.success() {
          let stderr = String::from_utf8_lossy(&output.stderr);
---- a/src/instance/manager.rs
-+++ b/src/instance/manager.rs
+diff -ruN lighty-launch-26.5.12/src/installer/ressources/asset_partition.rs lighty-launch-26.5.12/src/installer/ressources/asset_partition.rs
+--- lighty-launch-26.5.12/src/installer/ressources/asset_partition.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/installer/ressources/asset_partition.rs	2026-08-02 21:59:46.444900762 +0400
+@@ -64,7 +64,14 @@
+             lighty_core::mkdir!(dir);
+         }
+ 
+-        if needs_download(&target, entry.sha1.as_ref(), &entry.name).await {
++        if needs_download(
++            &target,
++            entry.sha1.as_ref(),
++            entry.size,
++            &entry.name,
++        )
++        .await
++        {
+             bytes += entry.size.unwrap_or(0);
+             tasks.push((url.clone(), target));
+         }
+diff -ruN lighty-launch-26.5.12/src/installer/ressources/assets.rs lighty-launch-26.5.12/src/installer/ressources/assets.rs
+--- lighty-launch-26.5.12/src/installer/ressources/assets.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/installer/ressources/assets.rs	2026-08-02 21:59:46.445111698 +0400
+@@ -36,7 +36,14 @@
+             }
+         };
+ 
+-        if needs_download(&path, Some(&asset.hash), &asset.hash).await {
++        if needs_download(
++            &path,
++            Some(&asset.hash),
++            Some(asset.size),
++            &asset.hash,
++        )
++        .await
++        {
+             tasks.push((url.clone(), path));
+         }
+     }
+diff -ruN lighty-launch-26.5.12/src/installer/ressources/client.rs lighty-launch-26.5.12/src/installer/ressources/client.rs
+--- lighty-launch-26.5.12/src/installer/ressources/client.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/installer/ressources/client.rs	2026-08-02 21:59:46.445062477 +0400
+@@ -21,7 +21,14 @@
+     let url = client.url.as_ref()?.clone();
+     let client_path = version.game_dirs().join(format!("{}.jar", version.name()));
+ 
+-    if needs_download(&client_path, client.sha1.as_ref(), "Client JAR").await {
++    if needs_download(
++        &client_path,
++        client.sha1.as_ref(),
++        client.size,
++        "Client JAR",
++    )
++    .await
++    {
+         Some((url, client_path))
+     } else {
+         None
+diff -ruN lighty-launch-26.5.12/src/installer/ressources/libraries.rs lighty-launch-26.5.12/src/installer/ressources/libraries.rs
+--- lighty-launch-26.5.12/src/installer/ressources/libraries.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/installer/ressources/libraries.rs	2026-08-02 21:59:46.444956246 +0400
+@@ -32,7 +32,7 @@
+ 
+         let path = parent_path.join(path_str);
+ 
+-        if needs_download(&path, lib.sha1.as_ref(), &lib.name).await {
++        if needs_download(&path, lib.sha1.as_ref(), lib.size, &lib.name).await {
+             tasks.push((url.clone(), path));
+         }
+     }
+diff -ruN lighty-launch-26.5.12/src/installer/ressources/modpack/curseforge.rs lighty-launch-26.5.12/src/installer/ressources/modpack/curseforge.rs
+--- lighty-launch-26.5.12/src/installer/ressources/modpack/curseforge.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/installer/ressources/modpack/curseforge.rs	2026-08-02 21:59:46.444487545 +0400
+@@ -11,6 +11,7 @@
+ use lighty_core::QueryError;
+ use lighty_loaders::types::version_metadata::Mods;
+ use lighty_loaders::types::VersionInfo;
++use lighty_modsloader::curseforge::api::resolve_file_download_url;
+ use lighty_modsloader::curseforge::client::{fetch_pinned_file, install_subdir_for};
+ use lighty_modsloader::curseforge::client_metadata::HASH_ALGO_SHA1;
+ use lighty_modsloader::curseforge::modpack::parse_manifest;
+@@ -53,11 +54,11 @@
+                     fetch_pinned_file(cf_file.project_id, cf_file.file_id),
+                     install_subdir_for(cf_file.project_id, ttl),
+                 )?;
+-                let url = resolved.download_url.ok_or_else(|| {
+-                    InstallerError::Query(QueryError::ModDistributionForbidden {
+-                        id: format!("{}/{}", cf_file.project_id, cf_file.file_id),
+-                    })
+-                })?;
++                let url = resolve_file_download_url(
++                    resolved.id,
++                    &resolved.file_name,
++                    resolved.download_url.as_deref(),
++                );
+                 let sha1 = resolved
+                     .hashes
+                     .iter()
+diff -ruN lighty-launch-26.5.12/src/installer/ressources/modpack/pipeline.rs lighty-launch-26.5.12/src/installer/ressources/modpack/pipeline.rs
+--- lighty-launch-26.5.12/src/installer/ressources/modpack/pipeline.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/installer/ressources/modpack/pipeline.rs	2026-08-02 21:59:46.444648785 +0400
+@@ -22,8 +22,10 @@
+ /// Runs the modpack pipeline for `source` and returns the `Vec<Mods>`
+ /// to merge into the version pivot before install.
+ ///
+-/// Returns `Ok(vec![])` when the marker already matches (idempotent
+-/// re-run — nothing to do).
++/// When a previous run already resolved this pack, returns the **cached
++/// mod list** so the installer can still verify / re-download missing or
++/// corrupt files. Returning an empty vec here used to skip verification
++/// entirely and launch with incomplete packs on flaky networks.
+ pub(crate) async fn process<V>(
+     source: &ModpackSource,
+     version: &V,
+@@ -50,16 +52,35 @@
+     tokio::fs::create_dir_all(&cache_dir).await?;
+     let archive_path = cache_dir.join(format!("{url_sha1}.archive"));
+     let marker_path = cache_dir.join(format!("{url_sha1}.installed"));
++    let mods_cache_path = cache_dir.join(format!("{url_sha1}.mods.json"));
+     let work_dir = cache_dir.join(format!("work-{url_sha1}"));
+ 
+-    // Idempotence: marker file matches the URL hash means we're done.
++    // Fast path: reuse the resolved mod list so install can verify files
++    // without re-hitting CurseForge/Modrinth for every entry.
+     if marker_path.exists() {
+         if let Ok(saved) = tokio::fs::read_to_string(&marker_path).await {
+             if saved.trim() == url_sha1 {
+-                lighty_core::trace_info!(
+-                    "[Modpack] Already installed (marker matches), skipping"
++                if let Ok(bytes) = tokio::fs::read(&mods_cache_path).await {
++                    if let Ok(mods) = serde_json::from_slice::<Vec<Mods>>(&bytes) {
++                        if !mods.is_empty() {
++                            lighty_core::trace_info!(
++                                "[Modpack] Cached mod list ({} entries) - install will verify",
++                                mods.len()
++                            );
++                            #[cfg(feature = "events")]
++                            if let Some(bus) = event_bus {
++                                bus.emit(Event::Modloader(ModloaderEvent::ModpackInstalled {
++                                    name: source_desc.clone(),
++                                    mods_count: mods.len(),
++                                }));
++                            }
++                            return Ok(mods);
++                        }
++                    }
++                }
++                lighty_core::trace_warn!(
++                    "[Modpack] Marker present but mod list cache missing/empty - rebuilding"
+                 );
+-                return Ok(Vec::new());
+             }
+         }
+     }
+@@ -98,6 +119,14 @@
+         }));
+     };
+ 
++    // Persist the resolved list BEFORE the marker so a crash between the
++    // two never leaves us with "installed" + empty verification list.
++    let mods_json = serde_json::to_vec(&mods).map_err(|e| {
++        InstallerError::Query(QueryError::Conversion {
++            message: format!("serialize mod list: {e}"),
++        })
++    })?;
++    tokio::fs::write(&mods_cache_path, &mods_json).await?;
+     tokio::fs::write(&marker_path, &url_sha1).await?;
+ 
+     if work_dir.exists() {
+diff -ruN lighty-launch-26.5.12/src/installer/ressources/natives.rs lighty-launch-26.5.12/src/installer/ressources/natives.rs
+--- lighty-launch-26.5.12/src/installer/ressources/natives.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/installer/ressources/natives.rs	2026-08-02 21:59:46.445009836 +0400
+@@ -38,7 +38,7 @@
+ 
+         let jar_path = libraries_path.join(path_str);
+ 
+-        if needs_download(&jar_path, native.sha1.as_ref(), &native.name).await {
++        if needs_download(&jar_path, native.sha1.as_ref(), native.size, &native.name).await {
+             download_tasks.push((url.clone(), jar_path.clone()));
+         }
+ 
+diff -ruN lighty-launch-26.5.12/src/installer/verifier.rs lighty-launch-26.5.12/src/installer/verifier.rs
+--- lighty-launch-26.5.12/src/installer/verifier.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/installer/verifier.rs	2026-08-02 21:59:46.444738442 +0400
+@@ -12,18 +12,40 @@
+ 
+ /// Returns whether the file at `path` needs to be (re-)downloaded.
+ ///
+-/// `true` when missing, zero-byte, or the SHA1 doesn't match.
+-pub async fn needs_download(path: &PathBuf, sha1: Option<&String>, name: &str) -> bool {
++/// `true` when missing, zero-byte, size mismatch, or the SHA1 doesn't match.
++pub async fn needs_download(
++    path: &PathBuf,
++    sha1: Option<&String>,
++    expected_size: Option<u64>,
++    name: &str,
++) -> bool {
+     if !path.exists() {
+         return true;
+     }
+ 
++    let Ok(meta) = fs::metadata(path).await else {
++        return true;
++    };
++
+     // Zero-byte files are stale artifacts of failed downloads.
+-    if let Ok(meta) = fs::metadata(path).await {
+-        if meta.len() == 0 {
++    if meta.len() == 0 {
++        lighty_core::trace_warn!(
++            "[Installer] Zero-byte cached file for {}, re-downloading...",
++            name
++        );
++        let _ = fs::remove_file(path).await;
++        return true;
++    }
++
++    // Truncated downloads on flaky networks often leave a non-zero but
++    // incomplete file. Catch those even when SHA1 is unavailable.
++    if let Some(expected) = expected_size {
++        if meta.len() != expected {
+             lighty_core::trace_warn!(
+-                "[Installer] Zero-byte cached file for {}, re-downloading...",
+-                name
++                "[Installer] Size mismatch for {} (got {}, expected {}), re-downloading...",
++                name,
++                meta.len(),
++                expected
+             );
+             let _ = fs::remove_file(path).await;
+             return true;
+diff -ruN lighty-launch-26.5.12/src/instance/manager.rs lighty-launch-26.5.12/src/instance/manager.rs
+--- lighty-launch-26.5.12/src/instance/manager.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/instance/manager.rs	2026-08-02 21:59:46.445281390 +0400
 @@ -119,9 +119,12 @@
          // terminate the process tree.
          #[cfg(target_os = "windows")]
@@ -377,3 +460,85 @@
                  .output()?;
  
              if !output.status.success() {
+diff -ruN lighty-launch-26.5.12/src/launch/mod.rs lighty-launch-26.5.12/src/launch/mod.rs
+--- lighty-launch-26.5.12/src/launch/mod.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/launch/mod.rs	2026-08-03 18:12:29.191257113 +0400
+@@ -4,9 +4,11 @@
+ mod runner;
+ mod builder;
+ mod config;
++mod pre_launch;
+ #[cfg(feature = "events")]
+ mod window;
+ 
+ pub use runner::*;
+ pub use builder::LaunchBuilder;
+ pub use config::LaunchConfig;
++pub use pre_launch::set_pre_launch_hook;
+diff -ruN lighty-launch-26.5.12/src/launch/pre_launch.rs lighty-launch-26.5.12/src/launch/pre_launch.rs
+--- lighty-launch-26.5.12/src/launch/pre_launch.rs	1970-01-01 04:00:00.000000000 +0400
++++ lighty-launch-26.5.12/src/launch/pre_launch.rs	2026-08-03 18:14:03.021047862 +0400
+@@ -0,0 +1,39 @@
++// Copyright (c) 2025 Hamadi
++// Licensed under the MIT License
++//
++// RSLauncher addition: host can register work that must finish after install
++// and before the JVM is spawned (mod reconcile, override re-apply, etc.).
++
++use std::future::Future;
++use std::pin::Pin;
++use std::sync::RwLock;
++
++type BoxFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
++type HookFn = Box<dyn Fn() -> BoxFuture + Send + Sync>;
++
++static PRE_LAUNCH_HOOK: RwLock<Option<HookFn>> = RwLock::new(None);
++
++/// Register a hook invoked after install / Forge processors and before the
++/// game process is spawned. Replaces any previous hook.
++pub fn set_pre_launch_hook<F, Fut>(hook: F)
++where
++    F: Fn() -> Fut + Send + Sync + 'static,
++    Fut: Future<Output = ()> + Send + 'static,
++{
++    let boxed: HookFn = Box::new(move || Box::pin(hook()));
++    if let Ok(mut slot) = PRE_LAUNCH_HOOK.write() {
++        *slot = Some(boxed);
++    }
++}
++
++pub(crate) async fn run_pre_launch_hook() {
++    let fut = {
++        let Ok(guard) = PRE_LAUNCH_HOOK.read() else {
++            return;
++        };
++        guard.as_ref().map(|hook| hook())
++    };
++    if let Some(fut) = fut {
++        fut.await;
++    }
++}
+diff -ruN lighty-launch-26.5.12/src/launch/runner.rs lighty-launch-26.5.12/src/launch/runner.rs
+--- lighty-launch-26.5.12/src/launch/runner.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/launch/runner.rs	2026-08-03 18:12:29.598260851 +0400
+@@ -228,6 +228,9 @@
+         }
+     }
+ 
++    // Host hook (e.g. RSLauncher mod reconcile) — must finish before the JVM.
++    crate::launch::pre_launch::run_pre_launch_hook().await;
++
+     // Launch the game
+     execute_game(
+         version,
+diff -ruN lighty-launch-26.5.12/src/lib.rs lighty-launch-26.5.12/src/lib.rs
+--- lighty-launch-26.5.12/src/lib.rs	2006-07-24 05:21:28.000000000 +0400
++++ lighty-launch-26.5.12/src/lib.rs	2026-08-03 18:13:00.877539681 +0400
+@@ -18,6 +18,6 @@
+ pub mod installer;
+ pub mod instance;
+ 
+-pub use launch::{LaunchBuilder, LaunchConfig};
++pub use launch::{LaunchBuilder, LaunchConfig, set_pre_launch_hook};
+ pub use installer::Installer;
+ pub use instance::{InstanceControl, InstanceError, InstanceResult};

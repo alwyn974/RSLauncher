@@ -49,7 +49,11 @@ log = "0.4.33"
 
 # `tracing` enables Lighty's trace_* macros; its `log` feature forwards them
 # into the `log` facade that tauri-plugin-log installs (no tracing-subscriber).
-lighty-launcher = { version = "26.5.12", features = ["all-loaders", "lighty_updater", "all-mods", "events", "keyring", "tracing"] }
+# `all-loaders` only enables loader *metadata* (lighty-loaders/*). NeoForge/Forge
+# install processors live behind lighty-launch/{neoforge,forge} — without those,
+# the game launches with vanilla classpath and every mod reports neoforge/minecraft
+# as [MISSING].
+lighty-launcher = { version = "26.5.12", features = ["all-loaders", "neoforge", "forge", "lighty_updater", "all-mods", "events", "keyring", "tracing"] }
 # Only used for an async mutex in modpack_meta (Lighty already pulls tokio transitively).
 tokio = { version = "1.53.1", default-features = false, features = ["sync"] }
 anyhow = "1.0.104"

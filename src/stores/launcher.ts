@@ -97,7 +97,7 @@ export const LAUNCH_STEPS: { id: LaunchStage; label: string }[] = [
   { id: "java", label: "Java" },
   { id: "loader", label: "Loader" },
   { id: "downloading", label: "Download" },
-  { id: "verifying", label: "Extract" },
+  { id: "verifying", label: "Verify" },
   { id: "launching", label: "Launch" },
   { id: "running", label: "Running" },
 ];
@@ -229,14 +229,18 @@ function applyProgress(next: Progress) {
   const stage = (next.stage as LaunchStage) || "idle";
   const current = state.progress.stage;
 
-  // Ignore late install/extract events once we've moved past them
-  // (Lighty can still emit InstallProgress after the JVM is up).
+  // Ignore true late events (e.g. InstallProgress after JVM is up).
+  // Do NOT drop "downloading" just because an early ZIP extract briefly
+  // reported a later-looking stage — that was fixed on the Rust side by
+  // keeping CoreEvent extracts on "loader".
   if (
     stage !== "idle" &&
     stage !== "error" &&
     isPipelineStage(stage) &&
     isPipelineStage(current) &&
-    stageRank(stage) < stageRank(current)
+    stageRank(stage) < stageRank(current) &&
+    // Once launching/running, freeze earlier stages.
+    (current === "launching" || current === "running")
   ) {
     return;
   }

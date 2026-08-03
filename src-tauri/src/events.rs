@@ -34,21 +34,9 @@ pub fn spawn_bridge(app: AppHandle, bus: EventBus, launch_state: Arc<LaunchState
         while let Ok(event) = rx.next().await {
             match event {
                 Event::Launch(LaunchEvent::IsInstalled { version }) => {
-                    if let Ok(settings) = crate::settings::load() {
-                        let instance = crate::modpack::build_instance_with(&settings);
-                        if let Err(err) = crate::optional_content::sync(
-                            instance.game_dirs(),
-                            &settings,
-                        )
-                        .await
-                        {
-                            emit_log(
-                                "WARN",
-                                "launcher",
-                                format!("Optional content sync failed: {err}"),
-                            );
-                        }
-                    }
+                    // Heavy reconcile runs in the pre-launch hook (blocks JVM
+                    // spawn). Keep this path UI-only so the event bridge never
+                    // stalls while Lighty is still installing.
                     let msg = format!("{version} already installed");
                     emit_log("INFO", "launcher", &msg);
                     emit_progress(
@@ -142,22 +130,11 @@ pub fn spawn_bridge(app: AppHandle, bus: EventBus, launch_state: Arc<LaunchState
                                 format!("Could not refresh servers.dat: {err}"),
                             );
                         }
-                        // Jars / shader variants must be correct before the JVM starts.
-                        if let Err(err) = crate::optional_content::sync(
-                            instance.game_dirs(),
-                            &settings,
-                        )
-                        .await
-                        {
-                            emit_log(
-                                "WARN",
-                                "launcher",
-                                format!("Optional content sync failed: {err}"),
-                            );
-                        }
                     }
-                    // Lighty no longer emits LaunchEvent::Launching; nudge the
-                    // pipeline forward so we don't sit on Download/Extract.
+                    // Mod/optional reconcile runs in Lighty's pre-launch hook
+                    // (awaits before JVM spawn). Do not await it here — that
+                    // blocked the event bridge so the UI stayed on "Downloading"
+                    // while the game had already started.
                     emit_progress(
                         &app,
                         Progress::detail(
@@ -518,21 +495,30 @@ fn handle_loader(app: &AppHandle, event: LoaderEvent) {
 }
 
 fn handle_core(app: &AppHandle, event: CoreEvent) {
+    // IMPORTANT: these ZIP extracts fire *during* metadata / modpack resolve /
+    // natives — often *before* or *alongside* the main game download. Mapping
+    // them to "verifying" (rank after "downloading") made the Vue progress
+    // guard drop every InstallStarted/InstallProgress event, so Windows fresh
+    // installs looked like "Extract → skip download → launch".
     match event {
         CoreEvent::ExtractionStarted {
             archive_type,
             file_count,
-            ..
+            destination,
         } => {
             let detail = if file_count > 0 {
                 format!("{archive_type} · {file_count} files")
             } else {
                 format!("Extracting {archive_type}")
             };
-            emit_log("INFO", "core", format!("Extracting — {detail}"));
+            emit_log(
+                "INFO",
+                "core",
+                format!("Extracting — {detail} → {destination}"),
+            );
             emit_progress(
                 app,
-                Progress::detail("verifying", "Extracting archives", detail, 84),
+                Progress::detail("loader", "Extracting archives", detail, 33),
             );
         }
         CoreEvent::ExtractionProgress {
@@ -544,11 +530,11 @@ fn handle_core(app: &AppHandle, event: CoreEvent) {
             } else {
                 0.0
             };
-            let overall = 84 + ((pct * 0.08) as u32).min(8);
+            let overall = 32 + ((pct * 0.04) as u32).min(4);
             emit_progress(
                 app,
                 Progress {
-                    stage: "verifying".into(),
+                    stage: "loader".into(),
                     step: "Extracting archives".into(),
                     file: format!("{files_extracted}/{total_files} files"),
                     files_done: files_extracted as u32,
@@ -567,7 +553,7 @@ fn handle_core(app: &AppHandle, event: CoreEvent) {
             emit_log("INFO", "core", &detail);
             emit_progress(
                 app,
-                Progress::detail("verifying", "Extraction done", detail, 90),
+                Progress::detail("loader", "Extraction done", detail, 34),
             );
         }
     }
