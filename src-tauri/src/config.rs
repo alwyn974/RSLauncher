@@ -2,6 +2,9 @@
 
 pub const LAUNCHER_NAME: &str = "RSLauncher";
 
+/// Live modpack profile on `main` - fetched at startup; embedded TOML is fallback only.
+pub const MODPACK_TOML_URL: &str = "https://raw.githubusercontent.com/alwyn974/RSLauncher/main/src-tauri/modpack/modpack.toml";
+
 /// CurseForge API key baked in at compile time via `build.rs`
 /// (`CURSEFORGE_API_KEY` env or `src-tauri/curseforge_api_key` file).
 pub fn curseforge_api_key() -> Option<&'static str> {

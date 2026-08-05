@@ -1,17 +1,24 @@
-//! Compile-time modpack profile (`src-tauri/modpack/modpack.toml`).
+//! Modpack profile (`src-tauri/modpack/modpack.toml`).
+//!
+//! At startup we fetch the live TOML from GitHub (`config::MODPACK_TOML_URL`) and
+//! only fall back to the compile-time embedded copy if the fetch or parse fails.
 
 use std::sync::OnceLock;
+use std::time::Duration;
 
 use include_dir::{include_dir, Dir};
+use lighty_launcher::core::hosts::HTTP_CLIENT;
 use lighty_launcher::prelude::Loader;
 use serde::Deserialize;
 
+use crate::config;
 use crate::error::AppError;
 
 static SHADERPACKS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/modpack/shaderpacks");
 static PROFILE: OnceLock<ModpackProfile> = OnceLock::new();
 
 const EMBEDDED_TOML: &str = include_str!("../modpack/modpack.toml");
+const REMOTE_FETCH_TIMEOUT: Duration = Duration::from_secs(8);
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -183,9 +190,10 @@ pub fn loader_label(loader: &Loader) -> &'static str {
     }
 }
 
-/// Parse and validate the embedded profile. Panics on invalid baked TOML.
+/// Load profile from GitHub when possible; otherwise use the embedded TOML.
+/// Panics only if the embedded fallback itself is invalid.
 pub fn init() {
-    let profile = PROFILE.get_or_init(|| load_embedded().expect("invalid embedded modpack.toml"));
+    let profile = PROFILE.get_or_init(resolve_profile);
     log::info!(
         target: "rslauncher",
         "[modpack] {} · {} · MC {}",
@@ -199,8 +207,61 @@ pub fn get() -> &'static ModpackProfile {
     PROFILE.get().expect("modpack_profile::init() not called")
 }
 
+fn resolve_profile() -> ModpackProfile {
+    match fetch_remote_blocking() {
+        Ok(profile) => {
+            log::info!(
+                target: "rslauncher",
+                "[modpack] loaded profile from GitHub"
+            );
+            profile
+        }
+        Err(err) => {
+            log::warn!(
+                target: "rslauncher",
+                "[modpack] remote fetch failed ({err}); using embedded fallback"
+            );
+            load_embedded().expect("invalid embedded modpack.toml")
+        }
+    }
+}
+
+fn fetch_remote_blocking() -> Result<ModpackProfile, AppError> {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| AppError::msg(format!("tokio runtime: {e}")))?;
+    rt.block_on(fetch_remote())
+}
+
+async fn fetch_remote() -> Result<ModpackProfile, AppError> {
+    let response = HTTP_CLIENT
+        .get(config::MODPACK_TOML_URL)
+        .timeout(REMOTE_FETCH_TIMEOUT)
+        .header(
+            "User-Agent",
+            concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")),
+        )
+        .send()
+        .await
+        .map_err(|e| AppError::msg(format!("GET modpack.toml: {e}")))?
+        .error_for_status()
+        .map_err(|e| AppError::msg(format!("GET modpack.toml: {e}")))?;
+
+    let body = response
+        .text()
+        .await
+        .map_err(|e| AppError::msg(format!("read modpack.toml: {e}")))?;
+
+    parse_profile(&body)
+}
+
 fn load_embedded() -> Result<ModpackProfile, AppError> {
-    let raw: ProfileToml = toml::from_str(EMBEDDED_TOML)
+    parse_profile(EMBEDDED_TOML)
+}
+
+fn parse_profile(toml_str: &str) -> Result<ModpackProfile, AppError> {
+    let raw: ProfileToml = toml::from_str(toml_str)
         .map_err(|e| AppError::msg(format!("modpack.toml: {e}")))?;
 
     let loader = parse_loader(&raw.loader)?;

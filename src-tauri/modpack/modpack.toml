@@ -1,4 +1,4 @@
-# Modpack profile - baked into the launcher at compile time.
+# Modpack profile - served from GitHub at startup, also baked in as offline fallback.
 
 instance_name = "ATM10"
 # UI label (Play screen). Defaults to instance_name if omitted.
