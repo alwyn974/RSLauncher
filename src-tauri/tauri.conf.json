@@ -17,7 +17,7 @@
         "height": 768,
         "minWidth": 854,
         "minHeight": 480,
-        "center": true,
+        "center": false,
         "closable": true,
         "focus": true,
         "fullscreen": false,

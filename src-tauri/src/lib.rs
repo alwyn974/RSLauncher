@@ -15,65 +15,82 @@ mod servers;
 mod settings;
 mod state;
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use lighty_launcher::mods::curseforge;
 use lighty_launcher::prelude::*;
-use tauri::{LogicalSize, Manager, RunEvent};
+use tauri::{Manager, RunEvent, WindowEvent};
 use tauri_plugin_log::{Target, TargetKind};
+use tauri_plugin_window_state::{AppHandleExt, StateFlags, DEFAULT_FILENAME};
 
 use crate::state::LaunchState;
 
-/// Minecraft’s classic default window - also `minWidth` / `minHeight` in tauri.conf.
-const WINDOW_MIN_WIDTH: f64 = 854.0;
-const WINDOW_MIN_HEIGHT: f64 = 480.0;
-/// Must match `app.windows[0].width/height` in tauri.conf.json (used on bad restore).
-const WINDOW_DEFAULT_WIDTH: f64 = 1024.0;
-const WINDOW_DEFAULT_HEIGHT: f64 = 768.0;
+/// Debounce disk writes while the user drags/resizes (HMR kills often skip `Exit`).
+const WINDOW_STATE_SAVE_DEBOUNCE: Duration = Duration::from_millis(400);
 
-/// After `window-state` restore, clamp absurd sizes (e.g. a near-fullscreen
-/// physical size saved with `maximized: false`) back to the default.
-fn clamp_main_window_size(app: &tauri::App) -> tauri::Result<()> {
-    let Some(win) = app.get_webview_window("main") else {
-        return Ok(());
+fn persist_window_state(app: &tauri::AppHandle) {
+    if let Err(err) = app.save_window_state(StateFlags::all()) {
+        log::warn!(target: "rslauncher", "[launcher] save window state: {err}");
+    }
+}
+
+/// True when window-state has a real saved size for `main` (mirrors the plugin's
+/// "skip WindowState::default()" restore filter).
+fn has_persisted_window_state(app: &tauri::AppHandle) -> bool {
+    let Ok(dir) = app.path().app_config_dir() else {
+        return false;
     };
-    if win.is_maximized()? || win.is_fullscreen()? {
-        return Ok(());
+    let Ok(raw) = std::fs::read_to_string(dir.join(DEFAULT_FILENAME)) else {
+        return false;
+    };
+    let Ok(map) = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&raw) else {
+        return false;
+    };
+    let Some(main) = map.get("main") else {
+        return false;
+    };
+    let width = main.get("width").and_then(|v| v.as_u64()).unwrap_or(0);
+    let height = main.get("height").and_then(|v| v.as_u64()).unwrap_or(0);
+    width > 0 && height > 0
+}
+
+/// `center: true` in tauri.conf fights restore on every launch — only center once.
+fn center_main_window_on_first_launch(app: &tauri::App) {
+    if has_persisted_window_state(app.handle()) {
+        return;
     }
+    let Some(win) = app.get_webview_window("main") else {
+        return;
+    };
+    if let Err(err) = win.center() {
+        log::warn!(target: "rslauncher", "[launcher] center window on first launch: {err}");
+    }
+}
 
-    let scale = win.scale_factor()?;
-    let physical = win.inner_size()?;
-    let logical_w = physical.width as f64 / scale;
-    let logical_h = physical.height as f64 / scale;
+fn install_window_state_autosave(app: &tauri::App) {
+    let Some(win) = app.get_webview_window("main") else {
+        return;
+    };
+    let handle = app.handle().clone();
+    let generation = Arc::new(AtomicU64::new(0));
 
-    let monitor_logical = win.current_monitor()?.map(|m| {
-        let s = m.size();
-        (s.width as f64 / scale, s.height as f64 / scale)
+    win.on_window_event(move |event| {
+        match event {
+            WindowEvent::Moved(_) | WindowEvent::Resized(_) => {}
+            _ => return,
+        }
+        let gen = generation.fetch_add(1, Ordering::SeqCst) + 1;
+        let handle = handle.clone();
+        let generation = Arc::clone(&generation);
+        std::thread::spawn(move || {
+            std::thread::sleep(WINDOW_STATE_SAVE_DEBOUNCE);
+            if generation.load(Ordering::SeqCst) == gen {
+                persist_window_state(&handle);
+            }
+        });
     });
-
-    let mut width = logical_w.max(WINDOW_MIN_WIDTH);
-    let mut height = logical_h.max(WINDOW_MIN_HEIGHT);
-    let mut reset = false;
-
-    if let Some((mw, mh)) = monitor_logical {
-        // Physical size larger than the monitor → bad restore (common HiDPI glitch).
-        if width > mw || height > mh {
-            width = WINDOW_DEFAULT_WIDTH;
-            height = WINDOW_DEFAULT_HEIGHT;
-            reset = true;
-        }
-    }
-
-    if reset || (width - logical_w).abs() > 0.5 || (height - logical_h).abs() > 0.5 {
-        win.set_size(LogicalSize::new(width, height))?;
-        if reset {
-            log::warn!(
-                target: "rslauncher",
-                "[launcher] reset window size from {logical_w:.0}×{logical_h:.0} → {width:.0}×{height:.0}"
-            );
-        }
-    }
-    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -114,7 +131,6 @@ pub fn run() {
         .plugin(tauri_plugin_window_state::Builder::new().build())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_os::init())
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -137,9 +153,11 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            if let Err(err) = clamp_main_window_size(app) {
-                log::warn!(target: "rslauncher", "[launcher] window size clamp: {err}");
-            }
+            // window-state restores on window-ready; we only add debounced saves
+            // so HMR / kill-restarts keep size + monitor. Center only when there
+            // is no saved state yet (keeps `center: false` in tauri.conf).
+            center_main_window_on_first_launch(app);
+            install_window_state_autosave(app);
             Ok(())
         })
         .manage(launch_state)
@@ -162,6 +180,7 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app, event| {
             if let RunEvent::ExitRequested { .. } = event {
+                persist_window_state(app);
                 // Drop our PID tracking without killing the JVM - Minecraft is
                 // intentionally detached (see lighty-java patch).
                 if let Some(state) = app.try_state::<Arc<LaunchState>>() {

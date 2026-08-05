@@ -9,7 +9,6 @@
     "main"
   ],
   "permissions": [
-    "positioner:default",
     "updater:default",
     "process:default",
     "window-state:default"
