@@ -429,6 +429,29 @@ fn parse_index(toml_str: &str) -> Result<IndexToml, AppError> {
     toml::from_str(toml_str).map_err(|e| AppError::msg(format!("modpacks.toml: {e}")))
 }
 
+/// Resolve a shader Iris config: pack-local first, then shared `common/`.
+///
+/// Layout:
+/// - `modpack/shaderpacks/{pack_id}/{config_file}` (override)
+/// - `modpack/shaderpacks/common/{config_file}` (shared)
+fn resolve_shader_config(
+    pack_id: &str,
+    config_file: &str,
+) -> Result<(String, &'static include_dir::File<'static>), AppError> {
+    let local = format!("{pack_id}/{config_file}");
+    if let Some(file) = SHADERPACKS.get_file(&local) {
+        return Ok((local, file));
+    }
+    let common = format!("common/{config_file}");
+    if let Some(file) = SHADERPACKS.get_file(&common) {
+        return Ok((common, file));
+    }
+    Err(AppError::msg(format!(
+        "pack {pack_id}: shader config_file {config_file:?} not found in \
+         modpack/shaderpacks/{pack_id}/ or modpack/shaderpacks/common/"
+    )))
+}
+
 fn parse_profile(pack_id: &str, toml_str: &str) -> Result<ModpackProfile, AppError> {
     let raw: ProfileToml = toml::from_str(toml_str)
         .map_err(|e| AppError::msg(format!("pack {pack_id}: {e}")))?;
@@ -454,19 +477,12 @@ fn parse_profile(pack_id: &str, toml_str: &str) -> Result<ModpackProfile, AppErr
 
     let mut shaders = Vec::with_capacity(raw.shaders.len());
     for spec in raw.shaders {
-        let relative = format!("{pack_id}/{}", spec.config_file);
-        let file = SHADERPACKS.get_file(&relative).ok_or_else(|| {
-            AppError::msg(format!(
-                "pack {pack_id}: shader config_file {:?} not found in modpack/shaderpacks/{pack_id}/",
-                spec.config_file
-            ))
-        })?;
+        let (relative, file) = resolve_shader_config(pack_id, &spec.config_file)?;
         let config_txt = file
             .contents_utf8()
             .ok_or_else(|| {
                 AppError::msg(format!(
-                    "pack {pack_id}: shader config_file {:?} is not UTF-8",
-                    spec.config_file
+                    "pack {pack_id}: shader config_file {relative:?} is not UTF-8"
                 ))
             })?
             .to_string();
