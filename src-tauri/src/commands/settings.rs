@@ -1,11 +1,12 @@
-use lighty_launcher::prelude::VersionInfo;
+use lighty_launcher::prelude::*;
 use tauri::{AppHandle, Emitter};
 
 use crate::catalog::{self, CatalogDto};
-use crate::dto::{MemoryInfo, Settings};
+use crate::dto::{MemoryInfo, ModpackListEntry, Settings};
 use crate::error::AppError;
 use crate::modpack;
 use crate::modpack_meta;
+use crate::modpack_profile;
 use crate::optional_content;
 
 #[tauri::command]
@@ -29,6 +30,51 @@ pub async fn save_settings(settings: Settings) -> Result<Settings, AppError> {
 pub async fn get_catalog() -> Result<CatalogDto, AppError> {
     let settings = crate::settings::load()?;
     Ok(catalog::catalog_dto(&settings))
+}
+
+#[tauri::command]
+pub async fn list_modpacks() -> Result<Vec<ModpackListEntry>, AppError> {
+    let mut entries = Vec::new();
+    for id in modpack_profile::ids() {
+        let Some(profile) = modpack_profile::get_by_id(id) else {
+            continue;
+        };
+        let builder = modpack::build_instance_for(id);
+        let root = builder.game_dirs().to_path_buf();
+        entries.push(ModpackListEntry {
+            id: profile.id.clone(),
+            name: profile.display_name.clone(),
+            version: profile.display_version.clone(),
+            minecraft: profile.minecraft.clone(),
+            loader: profile.loader_label().to_string(),
+            loader_version: profile.loader_version.clone(),
+            instance_name: profile.instance_name.clone(),
+            installed: modpack::is_pack_installed_at(&root),
+        });
+    }
+    Ok(entries)
+}
+
+#[tauri::command]
+pub async fn set_active_modpack(id: String) -> Result<ModpackListEntry, AppError> {
+    let profile = modpack_profile::set_active(&id)?;
+    let builder = modpack::build_instance_for(&profile.id);
+    let root = builder.game_dirs().to_path_buf();
+    Ok(ModpackListEntry {
+        id: profile.id.clone(),
+        name: profile.display_name.clone(),
+        version: profile.display_version.clone(),
+        minecraft: profile.minecraft.clone(),
+        loader: profile.loader_label().to_string(),
+        loader_version: profile.loader_version.clone(),
+        instance_name: profile.instance_name.clone(),
+        installed: modpack::is_pack_installed_at(&root),
+    })
+}
+
+#[tauri::command]
+pub async fn get_active_modpack() -> Result<String, AppError> {
+    Ok(modpack_profile::active_id())
 }
 
 #[tauri::command]

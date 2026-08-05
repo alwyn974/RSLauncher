@@ -13,7 +13,8 @@ export type IconName =
   | "plus"
   | "copy"
   | "trash"
-  | "check";
+  | "check"
+  | "chevron";
 
 const props = withDefaults(defineProps<{ name: IconName; size?: number }>(), {
   size: 16,
@@ -55,6 +56,10 @@ const ICONS: Record<IconName, Rect[]> = {
   ],
   check: [
     [2, 8, 2, 2], [4, 10, 2, 2], [6, 8, 2, 2], [8, 6, 2, 2], [10, 4, 2, 2],
+  ],
+  // Down-pointing caret (no rotation hacks).
+  chevron: [
+    [3, 6, 2, 2], [5, 8, 2, 2], [7, 10, 2, 2], [9, 8, 2, 2], [11, 6, 2, 2],
   ],
 };
 

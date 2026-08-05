@@ -1,4 +1,4 @@
-//! Catalogue of required extras, optional mods, and shader variants (from modpack.toml).
+//! Catalogue of required extras, optional mods, and shader variants (active pack).
 
 use serde::Serialize;
 
@@ -54,6 +54,7 @@ pub struct ShaderVariantDto {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModpackInfoDto {
+    pub id: String,
     pub name: String,
     pub version: String,
     pub minecraft: String,
@@ -112,6 +113,7 @@ pub fn catalog_dto(settings: &Settings) -> CatalogDto {
     let profile = modpack_profile::get();
     CatalogDto {
         modpack: ModpackInfoDto {
+            id: profile.id.clone(),
             name: profile.display_name.clone(),
             version: profile.display_version.clone(),
             minecraft: profile.minecraft.clone(),

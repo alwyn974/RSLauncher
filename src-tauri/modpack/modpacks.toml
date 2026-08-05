@@ -1,0 +1,6 @@
+# Curated modpack index - fetched from GitHub at startup; embedded copy is fallback.
+default = "atm10"
+
+[[packs]]
+id = "atm10"
+path = "packs/atm10.toml"

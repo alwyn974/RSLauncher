@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::modpack_profile::ModpackProfile;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountDto {
@@ -19,9 +21,9 @@ pub struct Settings {
     pub height: u32,
     pub fullscreen: bool,
     pub jvm_args: String,
-    #[serde(default = "default_server_name")]
+    #[serde(default)]
     pub server_name: String,
-    #[serde(default = "default_server_address")]
+    #[serde(default)]
     pub server_address: String,
     /// Optional catalogue mod id → enabled. Missing keys use catalogue defaults.
     #[serde(default)]
@@ -31,17 +33,8 @@ pub struct Settings {
     pub enabled_shader_variants: HashMap<String, bool>,
 }
 
-fn default_server_name() -> String {
-    crate::modpack_profile::get().server.name.clone()
-}
-
-fn default_server_address() -> String {
-    crate::modpack_profile::get().server.address.clone()
-}
-
-impl Default for Settings {
-    fn default() -> Self {
-        let profile = crate::modpack_profile::get();
+impl Settings {
+    pub fn from_profile(profile: &ModpackProfile) -> Self {
         Self {
             ram_gb: profile.fallback_ram_gb,
             width: 1024,
@@ -54,6 +47,25 @@ impl Default for Settings {
             enabled_shader_variants: HashMap::new(),
         }
     }
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self::from_profile(crate::modpack_profile::get())
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModpackListEntry {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub minecraft: String,
+    pub loader: String,
+    pub loader_version: String,
+    pub instance_name: String,
+    pub installed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

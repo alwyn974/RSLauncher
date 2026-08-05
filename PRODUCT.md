@@ -12,11 +12,11 @@ Personal project: the author (and later friends) launching one fixed custom Mine
 
 ## Product Purpose
 
-RSLauncher is a minimal Minecraft launcher for a single custom modpack. It signs players in with their Microsoft account, keeps the modpack up to date, and launches the game. Success means: open → pick account → press Play → watch clear progress → game starts.
+RSLauncher is a minimal Minecraft launcher for a curated set of custom modpacks. It signs players in with their Microsoft account, keeps the selected pack up to date, and launches the game. Success means: open → pick account → pick pack → press Play → watch clear progress → game starts.
 
 ## Positioning
 
-Deliberately smaller than general-purpose launchers (Prism, CurseForge, Modrinth App): no version browsing, no mod management, no instance system. One modpack, one Play button, the few settings players actually touch (RAM, resolution, JVM args).
+Deliberately smaller than general-purpose launchers (Prism, CurseForge, Modrinth App): no store browsing, no arbitrary mod management. A curated multi-modpack catalog (index + pack TOMLs), one active pack, one Play button, the few settings players actually touch (RAM, resolution, JVM args) - per pack.
 
 ## Operating Context
 
@@ -29,8 +29,8 @@ Deliberately smaller than general-purpose launchers (Prism, CurseForge, Modrinth
 
 - Microsoft login button as the only auth path.
 - Multiple Minecraft accounts stored locally; switchable; removable.
-- Fixed custom modpack - no version or modpack selection UI.
-- Settings: RAM allocation, game resolution (width/height, fullscreen), custom JVM arguments.
+- Curated modpacks from `modpacks.toml` (GitHub + baked) - player picks the active pack; no open store.
+- Settings per active pack: RAM allocation, game resolution (width/height, fullscreen), custom JVM arguments, optional mods/shaders.
 - Progress display for downloads and launch steps: percent, file count, current file, speed, ETA.
 - Game log viewer (levels, auto-scroll, copy/clear).
 - First build is UI-only with a mocked state layer; real backend wiring (OAuth, download, JVM launch in Rust) is a later phase. Mock event shapes must mirror future Tauri events.
