@@ -6,7 +6,6 @@ version = 4
 name = "RSLauncher"
 version = "0.1.6"
 dependencies = [
- "anyhow",
  "fastnbt",
  "flate2",
  "include_dir",

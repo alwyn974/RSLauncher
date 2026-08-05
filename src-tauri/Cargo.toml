@@ -55,7 +55,6 @@ log = "0.4.33"
 lighty-launcher = { version = "26.5.12", features = ["all-loaders", "neoforge", "forge", "lighty_updater", "all-mods", "events", "keyring", "tracing"] }
 # `sync` for modpack_meta; `rt` to block_on the GitHub modpack.toml fetch at startup.
 tokio = { version = "1.53.1", default-features = false, features = ["sync", "rt"] }
-anyhow = "1.0.104"
 thiserror = "2.0.19"
 keyring = "4.1.6"
 fastnbt = "2.6.2"
