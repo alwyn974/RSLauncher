@@ -5,7 +5,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::accounts;
 use crate::config;
-use crate::dto::{AccountDto, DeviceCodePayload};
+use crate::dto::{AccountDto, DeviceCodePayload, Progress};
 use crate::error::AppError;
 use crate::state::LaunchState;
 
@@ -40,10 +40,16 @@ pub async fn login_with_microsoft(
     let bus = EventBus::new(256);
     crate::events::spawn_bridge(app.clone(), bus.clone(), Arc::clone(&state));
 
-    let profile = auth
-        .authenticate(Some(&bus))
-        .await
-        .map_err(|e| AppError::msg(e.to_string()))?;
+    let profile = match auth.authenticate(Some(&bus)).await {
+        Ok(profile) => profile,
+        Err(e) => {
+            let _ = app.emit("launch://progress", Progress::idle());
+            return Err(AppError::msg(e.to_string()));
+        }
+    };
+
+    // Ensure Play is idle after sign-in (auth must not leave launch progress busy).
+    let _ = app.emit("launch://progress", Progress::idle());
 
     accounts::upsert_from_profile(&profile)
 }

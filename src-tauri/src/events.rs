@@ -260,31 +260,21 @@ pub fn spawn_bridge(app: AppHandle, bus: EventBus, launch_state: Arc<LaunchState
                     };
                     emit_log(level, "game", e.line);
                 }
+                // Auth is for sign-in UI only (`auth://status`). Never touch
+                // launch://progress here — that left Play stuck on "SESSION READY"
+                // after Microsoft login (stage stayed "preparing", busy=true).
                 Event::Auth(AuthEvent::AuthenticationInProgress { step, .. }) => {
                     let _ = app.emit(
                         "auth://status",
                         crate::dto::AuthStatusPayload { step: step.clone() },
                     );
                     emit_log("INFO", "auth", &step);
-                    emit_progress(
-                        &app,
-                        Progress::detail("preparing", "Authenticating", step, 10),
-                    );
                 }
                 Event::Auth(AuthEvent::AuthenticationFailed { error, .. }) => {
                     emit_log("ERROR", "auth", error);
                 }
                 Event::Auth(AuthEvent::AuthenticationSuccess { username, .. }) => {
                     emit_log("INFO", "auth", format!("Signed in as {username}"));
-                    emit_progress(
-                        &app,
-                        Progress::detail(
-                            "preparing",
-                            "Session ready",
-                            format!("Signed in as {username}"),
-                            14,
-                        ),
-                    );
                 }
                 _ => {}
             }
