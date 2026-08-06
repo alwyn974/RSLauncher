@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use lighty_launcher::mods::ModpackSource;
 use lighty_launcher::prelude::*;
 
@@ -6,14 +8,32 @@ use crate::dto::Settings;
 use crate::modpack_profile::{self, PackProvider};
 use crate::settings;
 
-/// Build the configured instance (modpack + required/optional extras).
+/// Build the active instance (modpack + required/optional extras).
 pub fn build_instance() -> VersionBuilder<Loader> {
     let settings = settings::load().unwrap_or_default();
     build_instance_with(&settings)
 }
 
 pub fn build_instance_with(settings: &Settings) -> VersionBuilder<Loader> {
-    let profile = modpack_profile::get();
+    build_instance_for_with(&modpack_profile::active_id(), settings)
+}
+
+/// Build a VersionBuilder for a specific pack id (uses that pack's saved settings when available).
+pub fn build_instance_for(pack_id: &str) -> VersionBuilder<Loader> {
+    let settings = if pack_id == modpack_profile::active_id() {
+        settings::load().unwrap_or_else(|_| Settings::from_profile(
+            modpack_profile::get_by_id(pack_id).unwrap_or_else(|| modpack_profile::get()),
+        ))
+    } else {
+        Settings::from_profile(
+            modpack_profile::get_by_id(pack_id).unwrap_or_else(|| modpack_profile::get()),
+        )
+    };
+    build_instance_for_with(pack_id, &settings)
+}
+
+pub fn build_instance_for_with(pack_id: &str, settings: &Settings) -> VersionBuilder<Loader> {
+    let profile = modpack_profile::get_by_id(pack_id).unwrap_or_else(|| modpack_profile::get());
 
     let mut mods = VersionBuilder::new(
         &profile.instance_name,
@@ -38,36 +58,62 @@ pub fn build_instance_with(settings: &Settings) -> VersionBuilder<Loader> {
         }
     }
 
-    let mut cf = catalog::required_curseforge();
-    cf.extend(catalog::enabled_curseforge_optionals(settings));
-    if !cf.is_empty() {
-        mods = mods.with_curseforge_mods(cf);
-    }
+    // Catalogue helpers always read the *active* pack. When building a
+    // non-active pack for status checks, skip optionals (requireds still needed
+    // for a correct game dir layout only when launching the active pack).
+    if pack_id == modpack_profile::active_id() {
+        let mut cf = catalog::required_curseforge();
+        cf.extend(catalog::enabled_curseforge_optionals(settings));
+        if !cf.is_empty() {
+            mods = mods.with_curseforge_mods(cf);
+        }
 
-    let mut mr = catalog::required_modrinth();
-    mr.extend(catalog::enabled_modrinth_optionals(settings));
-    if !mr.is_empty() {
-        mods = mods.with_modrinth_mods(mr);
+        let mut mr = catalog::required_modrinth();
+        mr.extend(catalog::enabled_modrinth_optionals(settings));
+        if !mr.is_empty() {
+            mods = mods.with_modrinth_mods(mr);
+        }
+    } else {
+        let cf: Vec<(u32, Option<u32>)> = profile
+            .required_curseforge
+            .iter()
+            .map(|m| (m.project_id, m.file_id))
+            .collect();
+        if !cf.is_empty() {
+            mods = mods.with_curseforge_mods(cf);
+        }
+        let mr: Vec<(String, Option<String>)> = profile
+            .required_modrinth
+            .iter()
+            .map(|m| (m.project.clone(), m.version.clone()))
+            .collect();
+        if !mr.is_empty() {
+            mods = mods.with_modrinth_mods(mr);
+        }
     }
 
     mods.done()
 }
 
-/// True when the pack looks actually installed (not just an empty/partial dir).
+/// True when the active pack looks actually installed (not just an empty/partial dir).
 /// `servers.dat` alone must not count as installed.
 pub fn is_pack_installed() -> bool {
-    let instance = build_instance();
-    let root = instance.game_dirs();
+    is_pack_installed_at(build_instance().game_dirs())
+}
+
+pub fn is_pack_installed_at(root: &Path) -> bool {
     let mods_dir = root.join("mods");
     let versions_dir = root.join("versions");
-
     dir_has_entries(&mods_dir) || dir_has_entries(&versions_dir)
 }
 
-/// Count enabled mod jars in `mods/` (excludes `*.jar.disabled`).
+/// Count enabled mod jars in the active pack's `mods/` (excludes `*.jar.disabled`).
 pub fn active_mod_count() -> u32 {
-    let instance = build_instance();
-    let mods_dir = instance.game_dirs().join("mods");
+    active_mod_count_at(build_instance().game_dirs())
+}
+
+pub fn active_mod_count_at(root: &Path) -> u32 {
+    let mods_dir = root.join("mods");
     let Ok(entries) = std::fs::read_dir(mods_dir) else {
         return 0;
     };

@@ -6,6 +6,7 @@
 import { computed } from "vue";
 import { launcher } from "../stores/launcher";
 import AccountSwitcher from "../components/AccountSwitcher.vue";
+import ModpackSwitcher from "../components/ModpackSwitcher.vue";
 import PixelButton from "../components/PixelButton.vue";
 import PixelIcon from "../components/PixelIcon.vue";
 import ProgressPanel from "../components/ProgressPanel.vue";
@@ -65,11 +66,10 @@ function onQuickPlay() {
     </header>
 
     <main class="flex min-h-0 flex-1 flex-col items-center justify-center gap-6">
-      <div class="text-center">
-        <h1 class="font-pixel pixel-shadow text-3xl tracking-wide text-white">
-          {{ modpack.name }}
-        </h1>
-        <p class="mt-3 inline-block border-2 border-mc-border bg-mc-panel px-2 py-1 font-mono text-xs text-mc-gold">
+      <div class="flex flex-col items-center gap-3 text-center">
+        <h1 class="sr-only">{{ modpack.name }}</h1>
+        <ModpackSwitcher />
+        <p class="inline-block border-2 border-mc-border bg-mc-panel px-2 py-1 font-mono text-xs text-mc-gold">
           <template v-if="modpack.version">{{ modpack.version }} · </template>
           Minecraft {{ modpack.minecraft }} · {{ modpack.loader }} {{ modpack.loaderVersion }}
           <template v-if="modpack.modCount > 0"> · {{ modpack.modCount }} mods</template>

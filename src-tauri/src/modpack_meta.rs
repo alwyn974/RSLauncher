@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 
 use crate::config;
-use crate::modpack_profile::{self, PackProvider};
+use crate::modpack_profile::{self, ModpackProfile, PackProvider};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CachedRecommendedRam {
@@ -33,8 +33,8 @@ struct CfMinecraft {
 
 static FETCH_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 
-fn cache_path() -> PathBuf {
-    AppState::cache_dir().join("modpack-recommended-ram.json")
+fn cache_path_for(pack_id: &str) -> PathBuf {
+    AppState::cache_dir().join(format!("modpack-recommended-ram-{pack_id}.json"))
 }
 
 fn mb_to_gb(mb: u32) -> u32 {
@@ -42,8 +42,11 @@ fn mb_to_gb(mb: u32) -> u32 {
     ((mb as f64) / 1024.0).round().max(1.0) as u32
 }
 
-fn pack_file_id() -> Option<u32> {
-    let profile = modpack_profile::get();
+fn profile_for(pack_id: &str) -> &'static ModpackProfile {
+    modpack_profile::get_by_id(pack_id).unwrap_or_else(|| modpack_profile::get())
+}
+
+fn pack_file_id(profile: &ModpackProfile) -> Option<u32> {
     match profile.pack.provider {
         PackProvider::Curseforge => profile.pack.file_id,
         PackProvider::Modrinth => None,
@@ -51,20 +54,25 @@ fn pack_file_id() -> Option<u32> {
 }
 
 pub fn has_cache() -> bool {
-    read_cache().is_some()
+    read_cache(&modpack_profile::active_id()).is_some()
 }
 
-/// Cached / fallback recommended RAM in GiB (does not hit the network).
+/// Cached / fallback recommended RAM in GiB for the active pack (no network).
 pub fn recommended_gb_cached() -> u32 {
-    read_cache()
-        .map(|c| mb_to_gb(c.recommended_ram_mb))
-        .unwrap_or_else(|| modpack_profile::get().fallback_ram_gb)
+    recommended_gb_cached_for(&modpack_profile::active_id())
 }
 
-fn read_cache() -> Option<CachedRecommendedRam> {
-    let file_id = pack_file_id()?;
-    let path = cache_path();
-    let raw = fs::read_to_string(path).ok()?;
+pub fn recommended_gb_cached_for(pack_id: &str) -> u32 {
+    let profile = profile_for(pack_id);
+    read_cache(pack_id)
+        .map(|c| mb_to_gb(c.recommended_ram_mb))
+        .unwrap_or(profile.fallback_ram_gb)
+}
+
+fn read_cache(pack_id: &str) -> Option<CachedRecommendedRam> {
+    let profile = profile_for(pack_id);
+    let file_id = pack_file_id(profile)?;
+    let raw = fs::read_to_string(cache_path_for(pack_id)).ok()?;
     let cached: CachedRecommendedRam = serde_json::from_str(&raw).ok()?;
     if cached.file_id != file_id || cached.recommended_ram_mb == 0 {
         return None;
@@ -72,9 +80,10 @@ fn read_cache() -> Option<CachedRecommendedRam> {
     Some(cached)
 }
 
-fn write_cache(mb: u32) -> Result<(), String> {
-    let file_id = pack_file_id().ok_or_else(|| "not a CurseForge pack".to_string())?;
-    let path = cache_path();
+fn write_cache(pack_id: &str, mb: u32) -> Result<(), String> {
+    let profile = profile_for(pack_id);
+    let file_id = pack_file_id(profile).ok_or_else(|| "not a CurseForge pack".to_string())?;
+    let path = cache_path_for(pack_id);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
@@ -86,8 +95,7 @@ fn write_cache(mb: u32) -> Result<(), String> {
     fs::write(path, raw).map_err(|e| e.to_string())
 }
 
-fn forgecdn_url() -> Option<String> {
-    let profile = modpack_profile::get();
+fn forgecdn_url(profile: &ModpackProfile) -> Option<String> {
     let (project_id, file_id, file_name) = profile.curseforge_pack()?;
     let _ = project_id;
     let id = file_id.to_string();
@@ -123,34 +131,36 @@ fn parse_recommended_mb_from_zip(bytes: &[u8]) -> Result<u32, String> {
 
 /// Ensure cache is populated from the CurseForge pack zip (once per file id).
 pub async fn ensure_recommended_ram() -> u32 {
-    if pack_file_id().is_none() {
-        return modpack_profile::get().fallback_ram_gb;
+    let pack_id = modpack_profile::active_id();
+    let profile = profile_for(&pack_id);
+    if pack_file_id(profile).is_none() {
+        return profile.fallback_ram_gb;
     }
 
-    if let Some(cached) = read_cache() {
+    if let Some(cached) = read_cache(&pack_id) {
         return mb_to_gb(cached.recommended_ram_mb);
     }
 
     let lock = FETCH_LOCK.get_or_init(|| Mutex::new(()));
     let _guard = lock.lock().await;
 
-    if let Some(cached) = read_cache() {
+    if let Some(cached) = read_cache(&pack_id) {
         return mb_to_gb(cached.recommended_ram_mb);
     }
 
-    match fetch_recommended_mb().await {
+    match fetch_recommended_mb(profile).await {
         Ok(mb) => {
-            let _ = write_cache(mb);
+            let _ = write_cache(&pack_id, mb);
             mb_to_gb(mb)
         }
-        Err(_) => modpack_profile::get().fallback_ram_gb,
+        Err(_) => profile.fallback_ram_gb,
     }
 }
 
-async fn fetch_recommended_mb() -> Result<u32, String> {
-    let url = match resolve_download_url().await {
+async fn fetch_recommended_mb(profile: &ModpackProfile) -> Result<u32, String> {
+    let url = match resolve_download_url(profile).await {
         Ok(url) => url,
-        Err(_) => forgecdn_url().ok_or_else(|| "no forgecdn URL".to_string())?,
+        Err(_) => forgecdn_url(profile).ok_or_else(|| "no forgecdn URL".to_string())?,
     };
 
     let response = HTTP_CLIENT
@@ -166,8 +176,7 @@ async fn fetch_recommended_mb() -> Result<u32, String> {
     parse_recommended_mb_from_zip(&bytes)
 }
 
-async fn resolve_download_url() -> Result<String, String> {
-    let profile = modpack_profile::get();
+async fn resolve_download_url(profile: &ModpackProfile) -> Result<String, String> {
     let (project_id, file_id, _) = profile
         .curseforge_pack()
         .ok_or_else(|| "not a CurseForge pack".to_string())?;

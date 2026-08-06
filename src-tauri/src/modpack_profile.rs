@@ -1,9 +1,10 @@
-//! Modpack profile (`src-tauri/modpack/modpack.toml`).
+//! Curated modpack registry (`src-tauri/modpack/modpacks.toml` + `packs/*.toml`).
 //!
-//! At startup we fetch the live TOML from GitHub (`config::MODPACK_TOML_URL`) and
-//! only fall back to the compile-time embedded copy if the fetch or parse fails.
+//! At startup we fetch the live index (and each pack TOML) from GitHub and only
+//! fall back to the compile-time embedded copies if fetch/parse fails.
 
-use std::sync::OnceLock;
+use std::collections::HashMap;
+use std::sync::{OnceLock, RwLock};
 use std::time::Duration;
 
 use include_dir::{include_dir, Dir};
@@ -14,10 +15,13 @@ use serde::Deserialize;
 use crate::config;
 use crate::error::AppError;
 
+static EMBEDDED_PACKS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/modpack/packs");
 static SHADERPACKS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/modpack/shaderpacks");
-static PROFILE: OnceLock<ModpackProfile> = OnceLock::new();
+const EMBEDDED_INDEX: &str = include_str!("../modpack/modpacks.toml");
 
-const EMBEDDED_TOML: &str = include_str!("../modpack/modpack.toml");
+static REGISTRY: OnceLock<ModpackRegistry> = OnceLock::new();
+static ACTIVE_ID: RwLock<String> = RwLock::new(String::new());
+
 const REMOTE_FETCH_TIMEOUT: Duration = Duration::from_secs(8);
 
 #[derive(Debug, Clone, Deserialize)]
@@ -124,8 +128,22 @@ fn default_min_ram() -> u32 {
     2
 }
 
+#[derive(Debug, Clone, Deserialize)]
+struct IndexToml {
+    pub default: String,
+    pub packs: Vec<IndexPackEntry>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct IndexPackEntry {
+    pub id: String,
+    pub path: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct ModpackProfile {
+    /// Stable id from `modpacks.toml` (e.g. `atm10`).
+    pub id: String,
     pub instance_name: String,
     pub display_name: String,
     pub display_version: String,
@@ -163,6 +181,13 @@ impl ModpackProfile {
     }
 }
 
+struct ModpackRegistry {
+    default_id: String,
+    /// Insertion order from the index.
+    order: Vec<String>,
+    packs: HashMap<String, ModpackProfile>,
+}
+
 pub fn parse_loader(name: &str) -> Result<Loader, AppError> {
     match name.trim().to_ascii_lowercase().as_str() {
         "neoforge" => Ok(Loader::NeoForge),
@@ -190,53 +215,199 @@ pub fn loader_label(loader: &Loader) -> &'static str {
     }
 }
 
-/// Load profile from GitHub when possible; otherwise use the embedded TOML.
+/// Load registry from GitHub when possible; otherwise use embedded files.
 /// Panics only if the embedded fallback itself is invalid.
 pub fn init() {
-    let profile = PROFILE.get_or_init(resolve_profile);
+    let registry = REGISTRY.get_or_init(resolve_registry);
+    let initial = crate::settings::peek_active_pack_id()
+        .filter(|id| registry.packs.contains_key(id))
+        .unwrap_or_else(|| registry.default_id.clone());
+    set_active_id(&initial);
     log::info!(
         target: "rslauncher",
-        "[modpack] {} · {} · MC {}",
-        profile.display_name,
-        profile.loader_display(),
-        profile.minecraft
+        "[modpack] {} pack(s) loaded · active={} · default={}",
+        registry.order.len(),
+        initial,
+        registry.default_id
     );
-}
-
-pub fn get() -> &'static ModpackProfile {
-    PROFILE.get().expect("modpack_profile::init() not called")
-}
-
-fn resolve_profile() -> ModpackProfile {
-    match fetch_remote_blocking() {
-        Ok(profile) => {
+    for id in &registry.order {
+        if let Some(p) = registry.packs.get(id) {
             log::info!(
                 target: "rslauncher",
-                "[modpack] loaded profile from GitHub"
+                "[modpack]   {id}: {} · {} · MC {}",
+                p.display_name,
+                p.loader_display(),
+                p.minecraft
             );
-            profile
+        }
+    }
+}
+
+fn registry() -> &'static ModpackRegistry {
+    REGISTRY.get().expect("modpack_profile::init() not called")
+}
+
+pub fn default_id() -> &'static str {
+    &registry().default_id
+}
+
+pub fn ids() -> &'static [String] {
+    &registry().order
+}
+
+pub fn get_by_id(id: &str) -> Option<&'static ModpackProfile> {
+    registry().packs.get(id)
+}
+
+/// Active pack profile (follows [`active_id`]).
+pub fn get() -> &'static ModpackProfile {
+    let id = active_id();
+    get_by_id(&id).unwrap_or_else(|| {
+        get_by_id(default_id()).expect("default modpack missing from registry")
+    })
+}
+
+pub fn active_id() -> String {
+    ACTIVE_ID
+        .read()
+        .expect("ACTIVE_ID poisoned")
+        .clone()
+}
+
+pub fn set_active_id(id: &str) {
+    if !registry().packs.contains_key(id) {
+        return;
+    }
+    *ACTIVE_ID.write().expect("ACTIVE_ID poisoned") = id.to_string();
+}
+
+/// Switch active pack and persist selection. Returns the new active id.
+pub fn set_active(id: &str) -> Result<&'static ModpackProfile, AppError> {
+    let profile = get_by_id(id).ok_or_else(|| AppError::msg(format!("Unknown modpack: {id}")))?;
+    set_active_id(id);
+    crate::settings::set_active_pack_id(id)?;
+    Ok(profile)
+}
+
+fn resolve_registry() -> ModpackRegistry {
+    match fetch_remote_registry_blocking() {
+        Ok(reg) => {
+            log::info!(
+                target: "rslauncher",
+                "[modpack] loaded index + packs from GitHub"
+            );
+            reg
         }
         Err(err) => {
             log::warn!(
                 target: "rslauncher",
                 "[modpack] remote fetch failed ({err}); using embedded fallback"
             );
-            load_embedded().expect("invalid embedded modpack.toml")
+            load_embedded_registry().expect("invalid embedded modpacks.toml / packs")
         }
     }
 }
 
-fn fetch_remote_blocking() -> Result<ModpackProfile, AppError> {
+fn fetch_remote_registry_blocking() -> Result<ModpackRegistry, AppError> {
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .map_err(|e| AppError::msg(format!("tokio runtime: {e}")))?;
-    rt.block_on(fetch_remote())
+    rt.block_on(fetch_remote_registry())
 }
 
-async fn fetch_remote() -> Result<ModpackProfile, AppError> {
+async fn fetch_remote_registry() -> Result<ModpackRegistry, AppError> {
+    let index_body = http_get_text(config::MODPACKS_TOML_URL).await?;
+    let index = parse_index(&index_body)?;
+
+    let mut packs = HashMap::new();
+    let mut order = Vec::new();
+
+    for entry in &index.packs {
+        let url = format!("{}/{}", config::MODPACK_BASE_URL, entry.path);
+        let body = match http_get_text(&url).await {
+            Ok(b) => b,
+            Err(err) => {
+                log::warn!(
+                    target: "rslauncher",
+                    "[modpack] remote pack {} failed ({err}); trying embedded",
+                    entry.id
+                );
+                match load_embedded_pack_toml(&entry.path) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        return Err(AppError::msg(format!(
+                            "pack {}: remote and embedded both failed ({e})",
+                            entry.id
+                        )));
+                    }
+                }
+            }
+        };
+        let profile = parse_profile(&entry.id, &body)?;
+        order.push(entry.id.clone());
+        packs.insert(entry.id.clone(), profile);
+    }
+
+    if packs.is_empty() {
+        return Err(AppError::msg("modpacks.toml: no packs listed"));
+    }
+    if !packs.contains_key(&index.default) {
+        return Err(AppError::msg(format!(
+            "modpacks.toml: default {:?} not in packs list",
+            index.default
+        )));
+    }
+
+    Ok(ModpackRegistry {
+        default_id: index.default,
+        order,
+        packs,
+    })
+}
+
+fn load_embedded_registry() -> Result<ModpackRegistry, AppError> {
+    let index = parse_index(EMBEDDED_INDEX)?;
+    let mut packs = HashMap::new();
+    let mut order = Vec::new();
+
+    for entry in &index.packs {
+        let body = load_embedded_pack_toml(&entry.path)?;
+        let profile = parse_profile(&entry.id, &body)?;
+        order.push(entry.id.clone());
+        packs.insert(entry.id.clone(), profile);
+    }
+
+    if packs.is_empty() {
+        return Err(AppError::msg("embedded modpacks.toml: no packs"));
+    }
+    if !packs.contains_key(&index.default) {
+        return Err(AppError::msg(format!(
+            "embedded modpacks.toml: default {:?} missing",
+            index.default
+        )));
+    }
+
+    Ok(ModpackRegistry {
+        default_id: index.default,
+        order,
+        packs,
+    })
+}
+
+fn load_embedded_pack_toml(path: &str) -> Result<String, AppError> {
+    let relative = path.strip_prefix("packs/").unwrap_or(path);
+    let file = EMBEDDED_PACKS.get_file(relative).ok_or_else(|| {
+        AppError::msg(format!("embedded pack file missing: {path}"))
+    })?;
+    file.contents_utf8()
+        .map(|s| s.to_string())
+        .ok_or_else(|| AppError::msg(format!("embedded pack {path} is not UTF-8")))
+}
+
+async fn http_get_text(url: &str) -> Result<String, AppError> {
     let response = HTTP_CLIENT
-        .get(config::MODPACK_TOML_URL)
+        .get(url)
         .timeout(REMOTE_FETCH_TIMEOUT)
         .header(
             "User-Agent",
@@ -244,59 +415,74 @@ async fn fetch_remote() -> Result<ModpackProfile, AppError> {
         )
         .send()
         .await
-        .map_err(|e| AppError::msg(format!("GET modpack.toml: {e}")))?
+        .map_err(|e| AppError::msg(format!("GET {url}: {e}")))?
         .error_for_status()
-        .map_err(|e| AppError::msg(format!("GET modpack.toml: {e}")))?;
+        .map_err(|e| AppError::msg(format!("GET {url}: {e}")))?;
 
-    let body = response
+    response
         .text()
         .await
-        .map_err(|e| AppError::msg(format!("read modpack.toml: {e}")))?;
-
-    parse_profile(&body)
+        .map_err(|e| AppError::msg(format!("read {url}: {e}")))
 }
 
-fn load_embedded() -> Result<ModpackProfile, AppError> {
-    parse_profile(EMBEDDED_TOML)
+fn parse_index(toml_str: &str) -> Result<IndexToml, AppError> {
+    toml::from_str(toml_str).map_err(|e| AppError::msg(format!("modpacks.toml: {e}")))
 }
 
-fn parse_profile(toml_str: &str) -> Result<ModpackProfile, AppError> {
+/// Resolve a shader Iris config: pack-local first, then shared `common/`.
+///
+/// Layout:
+/// - `modpack/shaderpacks/{pack_id}/{config_file}` (override)
+/// - `modpack/shaderpacks/common/{config_file}` (shared)
+fn resolve_shader_config(
+    pack_id: &str,
+    config_file: &str,
+) -> Result<(String, &'static include_dir::File<'static>), AppError> {
+    let local = format!("{pack_id}/{config_file}");
+    if let Some(file) = SHADERPACKS.get_file(&local) {
+        return Ok((local, file));
+    }
+    let common = format!("common/{config_file}");
+    if let Some(file) = SHADERPACKS.get_file(&common) {
+        return Ok((common, file));
+    }
+    Err(AppError::msg(format!(
+        "pack {pack_id}: shader config_file {config_file:?} not found in \
+         modpack/shaderpacks/{pack_id}/ or modpack/shaderpacks/common/"
+    )))
+}
+
+fn parse_profile(pack_id: &str, toml_str: &str) -> Result<ModpackProfile, AppError> {
     let raw: ProfileToml = toml::from_str(toml_str)
-        .map_err(|e| AppError::msg(format!("modpack.toml: {e}")))?;
+        .map_err(|e| AppError::msg(format!("pack {pack_id}: {e}")))?;
 
     let loader = parse_loader(&raw.loader)?;
 
     match raw.pack.provider {
         PackProvider::Curseforge => {
             if raw.pack.project_id.is_none() || raw.pack.file_id.is_none() {
-                return Err(AppError::msg(
-                    "modpack.toml: curseforge pack needs project_id and file_id",
-                ));
+                return Err(AppError::msg(format!(
+                    "pack {pack_id}: curseforge pack needs project_id and file_id"
+                )));
             }
         }
         PackProvider::Modrinth => {
             if raw.pack.project.as_deref().unwrap_or("").is_empty() {
-                return Err(AppError::msg(
-                    "modpack.toml: modrinth pack needs project",
-                ));
+                return Err(AppError::msg(format!(
+                    "pack {pack_id}: modrinth pack needs project"
+                )));
             }
         }
     }
 
     let mut shaders = Vec::with_capacity(raw.shaders.len());
     for spec in raw.shaders {
-        let file = SHADERPACKS.get_file(&spec.config_file).ok_or_else(|| {
-            AppError::msg(format!(
-                "modpack.toml: shader config_file {:?} not found in modpack/shaderpacks/",
-                spec.config_file
-            ))
-        })?;
+        let (relative, file) = resolve_shader_config(pack_id, &spec.config_file)?;
         let config_txt = file
             .contents_utf8()
             .ok_or_else(|| {
                 AppError::msg(format!(
-                    "modpack.toml: shader config_file {:?} is not UTF-8",
-                    spec.config_file
+                    "pack {pack_id}: shader config_file {relative:?} is not UTF-8"
                 ))
             })?
             .to_string();
@@ -315,7 +501,7 @@ fn parse_profile(toml_str: &str) -> Result<ModpackProfile, AppError> {
             ModProvider::Curseforge => {
                 if opt.project_id.is_none() {
                     return Err(AppError::msg(format!(
-                        "modpack.toml: optional {} needs project_id",
+                        "pack {pack_id}: optional {} needs project_id",
                         opt.id
                     )));
                 }
@@ -323,7 +509,7 @@ fn parse_profile(toml_str: &str) -> Result<ModpackProfile, AppError> {
             ModProvider::Modrinth => {
                 if opt.project.as_deref().unwrap_or("").is_empty() {
                     return Err(AppError::msg(format!(
-                        "modpack.toml: optional {} needs project",
+                        "pack {pack_id}: optional {} needs project",
                         opt.id
                     )));
                 }
@@ -338,6 +524,7 @@ fn parse_profile(toml_str: &str) -> Result<ModpackProfile, AppError> {
     let display_version = raw.display_version.unwrap_or_default();
 
     Ok(ModpackProfile {
+        id: pack_id.to_string(),
         instance_name: raw.instance_name,
         display_name,
         display_version,

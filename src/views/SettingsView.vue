@@ -89,7 +89,12 @@ function reset() {
       <PixelButton class="px-2 py-1.5" aria-label="Back" @click="launcher.setView('play')">
         <PixelIcon name="back" :size="16" />
       </PixelButton>
-      <h1 class="font-pixel pixel-shadow text-sm text-white">Settings</h1>
+      <div>
+        <h1 class="font-pixel pixel-shadow text-sm text-white">Settings</h1>
+        <p class="mt-0.5 text-xs text-mc-muted">
+          {{ launcher.state.catalog.modpack.name }}
+        </p>
+      </div>
     </header>
 
     <main class="mx-auto mt-4 flex w-full max-w-lg min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-2">

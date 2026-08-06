@@ -16,7 +16,7 @@ import SignInStatus from "../components/SignInStatus.vue";
       <h1 class="font-pixel pixel-shadow text-4xl tracking-wide text-white">
         RS<span class="text-mc-gold">LAUNCHER</span>
       </h1>
-      <p class="mt-3 text-sm text-mc-muted">One modpack. One button.</p>
+      <p class="mt-3 text-sm text-mc-muted">Pick a pack. Press Play.</p>
     </div>
 
     <PixelButton

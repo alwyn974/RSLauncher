@@ -2,7 +2,8 @@
  * Launcher state - backed by Tauri commands/events:
  *
  *   commands: login_with_microsoft, remove_account, set_active_account,
- *             get_settings, save_settings, get_catalog, play, cancel, stop
+ *             get_settings, save_settings, get_catalog, list_modpacks,
+ *             set_active_modpack, play, cancel, stop
  *   events:   "launch://progress" -> Progress
  *             "auth://device_code" -> { code, url }
  *             "auth://status"     -> { step }
@@ -59,6 +60,7 @@ export interface ShaderVariantInfo {
 }
 
 export interface ModpackInfo {
+  id: string;
   name: string;
   version: string;
   minecraft: string;
@@ -66,6 +68,17 @@ export interface ModpackInfo {
   loaderVersion: string;
   modCount: number;
   instanceName: string;
+}
+
+export interface ModpackListEntry {
+  id: string;
+  name: string;
+  version: string;
+  minecraft: string;
+  loader: string;
+  loaderVersion: string;
+  instanceName: string;
+  installed: boolean;
 }
 
 export interface Catalog {
@@ -128,6 +141,7 @@ export interface DeviceCode {
 export type View = "play" | "settings" | "logs";
 
 const EMPTY_MODPACK: ModpackInfo = {
+  id: "",
   name: "…",
   version: "",
   minecraft: "",
@@ -170,6 +184,8 @@ const IDLE_PROGRESS: Progress = {
 interface LauncherState {
   accounts: Account[];
   activeAccountId: string | null;
+  modpacks: ModpackListEntry[];
+  activePackId: string | null;
   settings: Settings;
   catalog: Catalog;
   memory: MemoryInfo;
@@ -195,6 +211,8 @@ const EMPTY_CATALOG: Catalog = {
 const state = reactive<LauncherState>({
   accounts: [],
   activeAccountId: null,
+  modpacks: [],
+  activePackId: null,
   settings: {
     ...DEFAULT_SETTINGS,
     enabledOptionalMods: {},
@@ -375,15 +393,20 @@ export async function initLauncher() {
     );
 
     try {
-      const [accounts, settings, catalog, active, memory, status] = await Promise.all([
-        invoke<Account[]>("list_accounts"),
-        invoke<Settings>("get_settings"),
-        invoke<Catalog>("get_catalog"),
-        invoke<Account | null>("get_active_account"),
-        invoke<MemoryInfo>("get_memory_info"),
-        invoke<{ installed: boolean; modCount: number }>("get_instance_status"),
-      ]);
+      const [accounts, settings, catalog, active, memory, status, modpacks, activePackId] =
+        await Promise.all([
+          invoke<Account[]>("list_accounts"),
+          invoke<Settings>("get_settings"),
+          invoke<Catalog>("get_catalog"),
+          invoke<Account | null>("get_active_account"),
+          invoke<MemoryInfo>("get_memory_info"),
+          invoke<{ installed: boolean; modCount: number }>("get_instance_status"),
+          invoke<ModpackListEntry[]>("list_modpacks"),
+          invoke<string>("get_active_modpack"),
+        ]);
       syncActive(accounts, active);
+      state.modpacks = modpacks;
+      state.activePackId = activePackId;
       state.memory = { ...DEFAULT_MEMORY, ...memory };
       state.installed = status.installed;
       state.catalog = catalog;
@@ -449,6 +472,43 @@ async function setActiveAccount(id: string) {
   try {
     await invoke("set_active_account", { id });
     state.activeAccountId = id;
+  } catch (e) {
+    log("ERROR", "launcher", String(e));
+  }
+}
+
+async function setActiveModpack(id: string) {
+  if (busy.value || state.progress.stage === "running") {
+    log("WARN", "launcher", "Cannot switch modpack while launching or running");
+    return;
+  }
+  try {
+    await invoke<ModpackListEntry>("set_active_modpack", { id });
+    state.activePackId = id;
+    const [settings, catalog, memory, status, modpacks] = await Promise.all([
+      invoke<Settings>("get_settings"),
+      invoke<Catalog>("get_catalog"),
+      invoke<MemoryInfo>("get_memory_info"),
+      invoke<{ installed: boolean; modCount: number }>("get_instance_status"),
+      invoke<ModpackListEntry[]>("list_modpacks"),
+    ]);
+    state.modpacks = modpacks;
+    state.memory = { ...DEFAULT_MEMORY, ...memory };
+    state.installed = status.installed;
+    state.catalog = catalog;
+    state.catalog.modpack.modCount = status.modCount;
+    state.settings = {
+      ...DEFAULT_SETTINGS,
+      ...settings,
+      enabledOptionalMods: { ...settings.enabledOptionalMods },
+      enabledShaderVariants: { ...settings.enabledShaderVariants },
+      ramGb: Math.min(
+        Math.max(settings.ramGb ?? state.memory.recommendedGb, state.memory.minGb),
+        state.memory.totalGb,
+      ),
+    };
+    applyProgress({ ...IDLE_PROGRESS });
+    log("INFO", "launcher", `Active modpack → ${catalog.modpack.name}`);
   } catch (e) {
     log("ERROR", "launcher", String(e));
   }
@@ -569,6 +629,7 @@ export const launcher = {
   login,
   removeAccount,
   setActiveAccount,
+  setActiveModpack,
   saveSettings,
   resetSettings,
   play,

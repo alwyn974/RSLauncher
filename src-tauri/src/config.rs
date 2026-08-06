@@ -1,9 +1,14 @@
-//! Launcher branding + secrets. Pack-specific data lives in `modpack/modpack.toml`.
+//! Launcher branding + secrets. Pack-specific data lives under `modpack/`.
 
 pub const LAUNCHER_NAME: &str = "RSLauncher";
 
-/// Live modpack profile on `main` - fetched at startup; embedded TOML is fallback only.
-pub const MODPACK_TOML_URL: &str = "https://raw.githubusercontent.com/alwyn974/RSLauncher/main/src-tauri/modpack/modpack.toml";
+/// Base URL for live modpack files on `main` (trailing slash omitted).
+pub const MODPACK_BASE_URL: &str =
+    "https://raw.githubusercontent.com/alwyn974/RSLauncher/main/src-tauri/modpack";
+
+/// Live modpack index - fetched at startup; embedded TOML is fallback only.
+pub const MODPACKS_TOML_URL: &str =
+    "https://raw.githubusercontent.com/alwyn974/RSLauncher/main/src-tauri/modpack/modpacks.toml";
 
 /// CurseForge API key baked in at compile time via `build.rs`
 /// (`CURSEFORGE_API_KEY` env or `src-tauri/curseforge_api_key` file).
