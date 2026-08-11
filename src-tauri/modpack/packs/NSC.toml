@@ -1307,6 +1307,15 @@ project_id = 378979
 file_id = 7604034
 
 [[optional]]
+id = "concentration"
+name = "Concentration"
+description = "Borderless fullscreen support for Minecraft 1.20.6+"
+default_enabled = false
+provider = "curseforge"
+project_id = 1120678
+file_id = 5840869
+
+[[optional]]
 id = "worldedit"
 name = "WorldEdit"
 description = "In-game Minecraft map editor - build bigger things more quickly!"
