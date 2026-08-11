@@ -1,12 +1,18 @@
-//! Catalogue of required extras, optional mods, and shader variants (active pack).
+//! Catalogue of required extras, optional mods, bundles, and shader variants (active pack).
+
+use std::collections::HashSet;
 
 use serde::Serialize;
 
 use crate::dto::Settings;
-use crate::modpack_profile::{self, ModProvider, OptionalModSpec, ShaderVariant};
+use crate::modpack_profile::{self, BundleSpec, ModProvider, OptionalModSpec, ShaderVariant};
 
 pub fn optional_mods() -> &'static [OptionalModSpec] {
     &modpack_profile::get().optional
+}
+
+pub fn bundles() -> &'static [BundleSpec] {
+    &modpack_profile::get().bundles
 }
 
 pub fn shader_variants() -> &'static [ShaderVariant] {
@@ -29,6 +35,23 @@ pub fn required_modrinth() -> Vec<(String, Option<String>)> {
         .collect()
 }
 
+fn bundled_mod_ids() -> HashSet<&'static str> {
+    bundles()
+        .iter()
+        .flat_map(|b| b.mods.iter().map(|id| id.as_str()))
+        .collect()
+}
+
+fn find_optional(mod_id: &str) -> Option<&'static OptionalModSpec> {
+    optional_mods().iter().find(|m| m.id == mod_id)
+}
+
+fn find_bundle_for_mod(mod_id: &str) -> Option<&'static BundleSpec> {
+    bundles()
+        .iter()
+        .find(|b| b.mods.iter().any(|id| id == mod_id))
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OptionalModDto {
@@ -38,6 +61,30 @@ pub struct OptionalModDto {
     pub source: String,
     pub default_enabled: bool,
     pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BundleMemberDto {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub source: String,
+    pub default_enabled: bool,
+    pub required: bool,
+    pub enabled: bool,
+    pub locked: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OptionalBundleDto {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub default_enabled: bool,
+    pub enabled: bool,
+    pub mods: Vec<BundleMemberDto>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -69,16 +116,42 @@ pub struct ModpackInfoDto {
 pub struct CatalogDto {
     pub modpack: ModpackInfoDto,
     pub optional_mods: Vec<OptionalModDto>,
+    pub optional_bundles: Vec<OptionalBundleDto>,
     pub shader_variants: Vec<ShaderVariantDto>,
+}
+
+/// Bundle is ON when every required member is enabled.
+pub fn is_bundle_enabled(settings: &Settings, bundle: &BundleSpec) -> bool {
+    let required = if bundle.required.is_empty() {
+        bundle.mods.as_slice()
+    } else {
+        bundle.required.as_slice()
+    };
+    required
+        .iter()
+        .all(|id| is_optional_mod_enabled(settings, id))
+}
+
+/// Required members are locked while the bundle is ON.
+pub fn bundle_member_locked(settings: &Settings, bundle: &BundleSpec, mod_id: &str) -> bool {
+    let is_required = if bundle.required.is_empty() {
+        bundle.mods.iter().any(|id| id == mod_id)
+    } else {
+        bundle.required.iter().any(|id| id == mod_id)
+    };
+    is_required && is_bundle_enabled(settings, bundle)
 }
 
 pub fn is_optional_mod_enabled(settings: &Settings, mod_id: &str) -> bool {
     if let Some(v) = settings.enabled_optional_mods.get(mod_id) {
         return *v;
     }
-    optional_mods()
-        .iter()
-        .find(|m| m.id == mod_id)
+    if let Some(bundle) = find_bundle_for_mod(mod_id) {
+        if bundle.default_enabled {
+            return true;
+        }
+    }
+    find_optional(mod_id)
         .map(|m| m.default_enabled)
         .unwrap_or(false)
 }
@@ -109,8 +182,59 @@ fn optional_source_label(m: &OptionalModSpec) -> String {
     }
 }
 
+fn optional_mod_dto(m: &OptionalModSpec, settings: &Settings) -> OptionalModDto {
+    OptionalModDto {
+        id: m.id.clone(),
+        name: m.name.clone(),
+        description: m.description.clone(),
+        source: optional_source_label(m),
+        default_enabled: m.default_enabled,
+        enabled: is_optional_mod_enabled(settings, &m.id),
+    }
+}
+
+fn optional_bundle_dto(bundle: &BundleSpec, settings: &Settings) -> OptionalBundleDto {
+    let enabled = is_bundle_enabled(settings, bundle);
+    let mods = bundle
+        .mods
+        .iter()
+        .filter_map(|mod_id| {
+            let m = find_optional(mod_id)?;
+            let required = if bundle.required.is_empty() {
+                true
+            } else {
+                bundle.required.iter().any(|id| id == mod_id)
+            };
+            Some(BundleMemberDto {
+                id: m.id.clone(),
+                name: m.name.clone(),
+                description: m.description.clone(),
+                source: optional_source_label(m),
+                default_enabled: if bundle.default_enabled {
+                    true
+                } else {
+                    m.default_enabled
+                },
+                required,
+                enabled: is_optional_mod_enabled(settings, &m.id),
+                locked: bundle_member_locked(settings, bundle, &m.id),
+            })
+        })
+        .collect();
+
+    OptionalBundleDto {
+        id: bundle.id.clone(),
+        name: bundle.name.clone(),
+        description: bundle.description.clone(),
+        default_enabled: bundle.default_enabled,
+        enabled,
+        mods,
+    }
+}
+
 pub fn catalog_dto(settings: &Settings) -> CatalogDto {
     let profile = modpack_profile::get();
+    let in_bundle = bundled_mod_ids();
     CatalogDto {
         modpack: ModpackInfoDto {
             id: profile.id.clone(),
@@ -124,14 +248,12 @@ pub fn catalog_dto(settings: &Settings) -> CatalogDto {
         },
         optional_mods: optional_mods()
             .iter()
-            .map(|m| OptionalModDto {
-                id: m.id.clone(),
-                name: m.name.clone(),
-                description: m.description.clone(),
-                source: optional_source_label(m),
-                default_enabled: m.default_enabled,
-                enabled: is_optional_mod_enabled(settings, &m.id),
-            })
+            .filter(|m| !in_bundle.contains(m.id.as_str()))
+            .map(|m| optional_mod_dto(m, settings))
+            .collect(),
+        optional_bundles: bundles()
+            .iter()
+            .map(|b| optional_bundle_dto(b, settings))
             .collect(),
         shader_variants: shader_variants()
             .iter()
