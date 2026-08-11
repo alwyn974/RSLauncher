@@ -15,7 +15,6 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
-  renameSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -62,9 +61,11 @@ async function downloadCrate(crate, dest) {
 
   execFileSync("tar", ["-xzf", cratePath, "-C", tmp], { stdio: "inherit" });
 
+  const extracted = join(tmp, `${crate}-${VERSION}`);
   rmSync(dest, { recursive: true, force: true });
   mkdirSync(OUT, { recursive: true });
-  renameSync(join(tmp, `${crate}-${VERSION}`), dest);
+  // cp + rm: rename fails with EXDEV when tmp and workspace are on different drives (Windows CI).
+  cpSync(extracted, dest, { recursive: true });
   rmSync(tmp, { recursive: true, force: true });
 }
 
