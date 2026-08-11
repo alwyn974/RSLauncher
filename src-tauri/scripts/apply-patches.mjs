@@ -104,11 +104,20 @@ async function applyOne(crate) {
   }
 
   console.log(`patching ${crate}-${VERSION}…`);
-  execFileSync(
-    "git",
-    ["apply", "-p1", "--whitespace=nowarn", patchFile],
-    { cwd: dest, stdio: "inherit" },
-  );
+  // Windows checkouts often rewrite *.patch to CRLF (autocrlf); git apply then
+  // fails against LF crate sources. Normalize to LF in a temp file.
+  const patchLf = readFileSync(patchFile).toString("utf8").replace(/\r\n/g, "\n");
+  const tmpPatch = join(mkdtempSync(join(tmpdir(), "rslauncher-patch-")), `${crate}.patch`);
+  writeFileSync(tmpPatch, patchLf);
+  try {
+    execFileSync(
+      "git",
+      ["apply", "-p1", "--whitespace=nowarn", tmpPatch],
+      { cwd: dest, stdio: "inherit" },
+    );
+  } finally {
+    rmSync(dirname(tmpPatch), { recursive: true, force: true });
+  }
   writeFileSync(stamp, `${patchHash}\n`);
   console.log(`ok: wrote ${dest}`);
 }

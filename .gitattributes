@@ -1,0 +1,2 @@
+# Unified diffs must stay LF so `git apply` matches crates.io sources on Windows.
+*.patch text eol=lf
