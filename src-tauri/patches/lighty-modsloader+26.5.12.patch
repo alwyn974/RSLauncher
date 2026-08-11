@@ -1,5 +1,5 @@
---- a/Cargo.toml
-+++ b/Cargo.toml
+--- a/Cargo.toml	2006-07-24 05:21:28.000000000 +0400
++++ b/Cargo.toml	2026-08-11 19:51:39.176068209 +0400
 @@ -39,6 +39,14 @@
  events = ["dep:lighty-event"]
  modrinth = []
@@ -15,8 +15,8 @@
  
  [lib]
  name = "lighty_modsloader"
---- a/src/curseforge/api.rs
-+++ b/src/curseforge/api.rs
+--- a/src/curseforge/api.rs	2006-07-24 05:21:28.000000000 +0400
++++ b/src/curseforge/api.rs	2026-08-11 19:51:39.176097693 +0400
 @@ -36,6 +36,40 @@
      })
  }
@@ -58,9 +58,26 @@
  /// Minimal RFC3986 URL-encoder.
  pub fn url_encode(input: &str) -> String {
      let mut out = String::with_capacity(input.len() + 8);
---- a/src/curseforge/client.rs
-+++ b/src/curseforge/client.rs
-@@ -171,12 +171,11 @@
+--- a/src/curseforge/client.rs	2006-07-24 05:21:28.000000000 +0400
++++ b/src/curseforge/client.rs	2026-08-11 19:51:39.176128719 +0400
+@@ -76,7 +76,15 @@
+                     .await?
+             };
+             let pivot = into_pivot(&file, subdir)?;
+-            let dependencies = collect_required_dependencies(&file);
++            // Pinned installs (modpacks / curated TOML lists) already name every
++            // jar. Following CF "required" deps then pulls wrong siblings
++            // (e.g. Create Fabric from a NeoForge Create addon) and fails the
++            // whole resolve. Only auto-walk deps for unpinned "latest" fetches.
++            let dependencies = if pinned_file.is_some() {
++                Vec::new()
++            } else {
++                collect_required_dependencies(&file)
++            };
+             Ok::<_, QueryError>(Arc::new((pivot, dependencies)))
+         })
+         .await?;
+@@ -171,12 +179,11 @@
  /// `subdir` is the runtime-relative folder picked from the project's
  /// `classId` (`"mods"`, `"resourcepacks"`, `"shaderpacks"`).
  fn into_pivot(file: &CurseForgeFile, subdir: &str) -> Result<Mods, QueryError> {
@@ -78,8 +95,8 @@
      let sha1 = file
          .hashes
          .iter()
---- a/src/curseforge/modpack.rs
-+++ b/src/curseforge/modpack.rs
+--- a/src/curseforge/modpack.rs	2006-07-24 05:21:28.000000000 +0400
++++ b/src/curseforge/modpack.rs	2026-08-11 19:51:39.176148008 +0400
 @@ -17,10 +17,11 @@
      match source {
          ModpackSource::CurseForgePinned { project_id, file_id } => {
@@ -96,8 +113,8 @@
          }
          _ => Err(QueryError::Conversion {
              message: "resolve_cf_modpack_url called with a non-CurseForge source".into(),
---- a/src/curseforge/mod.rs
-+++ b/src/curseforge/mod.rs
+--- a/src/curseforge/mod.rs	2006-07-24 05:21:28.000000000 +0400
++++ b/src/curseforge/mod.rs	2026-08-11 19:51:39.176161266 +0400
 @@ -9,5 +9,5 @@
  pub mod modpack;
  pub mod modpack_metadata;
