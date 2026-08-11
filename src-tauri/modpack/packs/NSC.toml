@@ -1276,3 +1276,37 @@ file_id = 7304075
 # --- END CURSEFORGE MANIFEST ---
 
 # Manual extras below this line are preserved on re-import:
+
+[[optional]]
+id = "distant-horizons"
+name = "Distant Horizons"
+description = "Massively increase render distance without harming performance."
+default_enabled = false
+provider = "curseforge"
+project_id = 508933
+file_id = 8389161
+
+[[optional]]
+id = "free-cam"
+name = "Free Cam"
+description = "Allows for free camera movement in Minecraft."
+default_enabled = false
+provider = "curseforge"
+project_id = 557076
+file_id = 5572364
+
+[[shaders]]
+id = "complementary-unbound-euphoria"
+name = "Complementary Unbound + Euphoria"
+description = "Applies Iris settings once the Euphoria folder exists."
+pack_name = "ComplementaryUnbound_r5.8.1 + EuphoriaPatches_1.9.3"
+config_file = "ComplementaryUnbound_r5.8.1 + EuphoriaPatches_1.9.3.txt"
+default_enabled = true
+
+[[shaders]]
+id = "complementary-reimagined-euphoria"
+name = "Complementary Reimagined + Euphoria"
+description = "Applies Iris settings once the Euphoria folder exists."
+pack_name = "ComplementaryReimagined_r5.8.1 + EuphoriaPatches_1.9.3"
+config_file = "ComplementaryReimagined_r5.8.1 + EuphoriaPatches_1.9.3.txt"
+default_enabled = true
