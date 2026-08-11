@@ -11,7 +11,7 @@ Only the unified diffs are committed (~5 KB). Full crate trees are **not**.
 Apply before any `cargo` / `tauri` command (Cargo must see `patched/` at resolve time):
 
 ```bash
-./scripts/apply-patches.sh
+node scripts/apply-patches.mjs
 ```
 
 `pnpm tauri:dev` / `pnpm tauri:build` run this automatically.

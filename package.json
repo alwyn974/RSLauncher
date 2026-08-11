@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "patches:apply": "bash src-tauri/scripts/apply-patches.sh",
+    "patches:apply": "node src-tauri/scripts/apply-patches.mjs",
     "tauri": "pnpm patches:apply && tauri",
     "tauri:dev": "pnpm patches:apply && tauri dev",
     "tauri:build": "pnpm patches:apply && tauri build"

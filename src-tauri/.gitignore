@@ -10,5 +10,5 @@
 /curseforge_api_key
 /azure_client_id
 
-# Materialized crate patches (from patches/*.patch via scripts/apply-patches.sh)
+# Materialized crate patches (from patches/*.patch via scripts/apply-patches.mjs)
 /patched/
