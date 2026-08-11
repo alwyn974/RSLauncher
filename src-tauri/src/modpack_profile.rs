@@ -219,7 +219,7 @@ pub fn loader_label(loader: &Loader) -> &'static str {
     }
 }
 
-/// Load registry from GitHub when possible; otherwise use embedded files.
+/// Load registry: embedded local packs in debug, GitHub (with embedded fallback) in release.
 /// Panics only if the embedded fallback itself is invalid.
 pub fn init() {
     let registry = REGISTRY.get_or_init(resolve_registry);
@@ -294,6 +294,16 @@ pub fn set_active(id: &str) -> Result<&'static ModpackProfile, AppError> {
 }
 
 fn resolve_registry() -> ModpackRegistry {
+    // Dev builds use the local/embedded catalog so unpublished packs (e.g. a
+    // freshly imported manifest) show up without waiting for a GitHub push.
+    if cfg!(debug_assertions) {
+        log::info!(
+            target: "rslauncher",
+            "[modpack] debug build — using embedded local packs"
+        );
+        return load_embedded_registry().expect("invalid embedded modpacks.toml / packs");
+    }
+
     match fetch_remote_registry_blocking() {
         Ok(reg) => {
             log::info!(
