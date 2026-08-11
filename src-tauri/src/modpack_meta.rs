@@ -47,8 +47,8 @@ fn profile_for(pack_id: &str) -> &'static ModpackProfile {
 }
 
 fn pack_file_id(profile: &ModpackProfile) -> Option<u32> {
-    match profile.pack.provider {
-        PackProvider::Curseforge => profile.pack.file_id,
+    match profile.pack.as_ref()?.provider {
+        PackProvider::Curseforge => profile.pack.as_ref()?.file_id,
         PackProvider::Modrinth => None,
     }
 }

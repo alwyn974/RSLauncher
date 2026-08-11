@@ -40,15 +40,24 @@ pub async fn remove_orphans(game_dir: &Path, _settings: &Settings) -> Result<(),
     let mods_dir = game_dir.join("mods");
     fs::create_dir_all(&mods_dir)?;
 
+    let pack_key = current_pack_key();
+    let stamp_path = game_dir.join(".rslauncher-pack-id");
+    let pack_changed = fs::read_to_string(&stamp_path)
+        .map(|s| s.trim() != pack_key)
+        .unwrap_or(true);
+
     let archive = match resolve_pack_archive_path().await {
-        Ok(Some(path)) => path,
+        Ok(Some(path)) => Some(path),
         Ok(None) => {
-            log::warn!(
-                target: "rslauncher",
-                "[mods] reconcile skipped — pack archive missing \
-                 (launch once so Lighty can download it)"
-            );
-            return Ok(());
+            if modpack_profile::get().pack.is_some() {
+                log::warn!(
+                    target: "rslauncher",
+                    "[mods] reconcile skipped — pack archive missing \
+                     (launch once so Lighty can download it)"
+                );
+                return Ok(());
+            }
+            None
         }
         Err(err) => {
             log::warn!(target: "rslauncher", "[mods] resolve pack archive: {err}");
@@ -56,40 +65,49 @@ pub async fn remove_orphans(game_dir: &Path, _settings: &Settings) -> Result<(),
         }
     };
 
-    let pack_key = current_pack_key();
-    let stamp_path = game_dir.join(".rslauncher-pack-id");
-    let pack_changed = fs::read_to_string(&stamp_path)
-        .map(|s| s.trim() != pack_key)
-        .unwrap_or(true);
+    let override_jars = if let Some(archive) = archive.as_ref() {
+        let jars = tokio::task::spawn_blocking({
+            let archive = archive.clone();
+            let game_dir = game_dir.to_path_buf();
+            move || apply_pack_overrides(&archive, &game_dir, pack_changed)
+        })
+        .await
+        .map_err(|e| AppError::msg(format!("override apply task panicked: {e}")))??;
 
-    let override_jars = tokio::task::spawn_blocking({
-        let archive = archive.clone();
-        let game_dir = game_dir.to_path_buf();
-        move || apply_pack_overrides(&archive, &game_dir, pack_changed)
-    })
-    .await
-    .map_err(|e| AppError::msg(format!("override apply task panicked: {e}")))??;
-
-    if pack_changed {
-        if let Err(err) = fs::write(&stamp_path, &pack_key) {
-            log::warn!(
-                target: "rslauncher",
-                "[mods] could not write pack stamp {}: {err}",
-                stamp_path.display()
-            );
-        } else {
+        if pack_changed {
+            if let Err(err) = fs::write(&stamp_path, &pack_key) {
+                log::warn!(
+                    target: "rslauncher",
+                    "[mods] could not write pack stamp {}: {err}",
+                    stamp_path.display()
+                );
+            } else {
+                log::info!(
+                    target: "rslauncher",
+                    "[mods] pack overrides refreshed for {pack_key}"
+                );
+            }
+        } else if !jars.is_empty() {
             log::info!(
                 target: "rslauncher",
-                "[mods] pack overrides refreshed for {pack_key}"
+                "[mods] applied {} override jar(s)",
+                jars.len()
             );
         }
-    } else if !override_jars.is_empty() {
-        log::info!(
-            target: "rslauncher",
-            "[mods] applied {} override jar(s)",
-            override_jars.len()
-        );
-    }
+        jars
+    } else {
+        // Manifest-only pack: no zip overrides to re-apply.
+        if pack_changed {
+            if let Err(err) = fs::write(&stamp_path, &pack_key) {
+                log::warn!(
+                    target: "rslauncher",
+                    "[mods] could not write pack stamp {}: {err}",
+                    stamp_path.display()
+                );
+            }
+        }
+        HashSet::new()
+    };
 
     let override_mod_ids = tokio::task::spawn_blocking({
         let mods_dir = mods_dir.clone();
@@ -102,8 +120,12 @@ pub async fn remove_orphans(game_dir: &Path, _settings: &Settings) -> Result<(),
     // Manifest jars that share a modId with an override must go.
     let dropped_conflicts = drop_modid_conflicts(&mods_dir, &override_jars, &override_mod_ids)?;
 
-    let pack_jars = load_pack_mod_jars_from_cache(&archive)?;
-    if pack_jars.is_empty() && override_jars.is_empty() {
+    let mut keep = if let Some(archive) = archive.as_ref() {
+        load_pack_mod_jars_from_cache(archive)?
+    } else {
+        HashSet::new()
+    };
+    if keep.is_empty() && override_jars.is_empty() && archive.is_some() {
         log::warn!(
             target: "rslauncher",
             "[mods] orphan cleanup skipped — modpack mod list cache missing/empty"
@@ -111,7 +133,6 @@ pub async fn remove_orphans(game_dir: &Path, _settings: &Settings) -> Result<(),
         return Ok(());
     }
 
-    let mut keep = pack_jars;
     for name in &override_jars {
         keep.insert(name.clone());
     }
@@ -119,6 +140,14 @@ pub async fn remove_orphans(game_dir: &Path, _settings: &Settings) -> Result<(),
         keep.remove(name);
     }
     extend_with_extra_jars(&mut keep).await;
+
+    if keep.is_empty() {
+        log::warn!(
+            target: "rslauncher",
+            "[mods] orphan cleanup skipped — no managed jar names resolved"
+        );
+        return Ok(());
+    }
 
     let mut removed = 0u32;
     for entry in fs::read_dir(&mods_dir)? {
@@ -179,14 +208,17 @@ fn mods_json_path(archive: &Path) -> PathBuf {
     archive.with_extension("mods.json")
 }
 
-async fn resolve_pack_archive_url() -> Result<String, AppError> {
+async fn resolve_pack_archive_url() -> Result<Option<String>, AppError> {
     let profile = modpack_profile::get();
-    match profile.pack.provider {
+    let Some(pack) = profile.pack.as_ref() else {
+        return Ok(None);
+    };
+    match pack.provider {
         PackProvider::Curseforge => {
-            let project_id = profile.pack.project_id.ok_or_else(|| {
+            let project_id = pack.project_id.ok_or_else(|| {
                 AppError::msg("modpack.toml: curseforge pack missing project_id")
             })?;
-            let file_id = profile.pack.file_id.ok_or_else(|| {
+            let file_id = pack.file_id.ok_or_else(|| {
                 AppError::msg("modpack.toml: curseforge pack missing file_id")
             })?;
             curseforge::modpack::resolve_cf_modpack_url(&ModpackSource::CurseForgePinned {
@@ -194,24 +226,28 @@ async fn resolve_pack_archive_url() -> Result<String, AppError> {
                 file_id,
             })
             .await
+            .map(Some)
             .map_err(|e| AppError::msg(format!("resolve CurseForge pack URL: {e}")))
         }
         PackProvider::Modrinth => {
-            let project = profile.pack.project.clone().ok_or_else(|| {
+            let project = pack.project.clone().ok_or_else(|| {
                 AppError::msg("modpack.toml: modrinth pack missing project")
             })?;
             modrinth::modpack::resolve_mrpack_url(&ModpackSource::ModrinthPinned {
                 project,
-                version: profile.pack.version.clone(),
+                version: pack.version.clone(),
             })
             .await
+            .map(Some)
             .map_err(|e| AppError::msg(format!("resolve Modrinth pack URL: {e}")))
         }
     }
 }
 
 async fn resolve_pack_archive_path() -> Result<Option<PathBuf>, AppError> {
-    let url = resolve_pack_archive_url().await?;
+    let Some(url) = resolve_pack_archive_url().await? else {
+        return Ok(None);
+    };
     let sha1 = calculate_sha1_bytes(url.as_bytes());
     let path = AppState::cache_dir()
         .join("modpacks")
@@ -267,17 +303,34 @@ fn jar_name_under_mods(entry: &CachedMod) -> Option<String> {
 
 fn current_pack_key() -> String {
     let profile = modpack_profile::get();
-    match profile.pack.provider {
-        PackProvider::Curseforge => format!(
-            "curseforge:{}:{}",
-            profile.pack.project_id.unwrap_or(0),
-            profile.pack.file_id.unwrap_or(0)
-        ),
-        PackProvider::Modrinth => format!(
-            "modrinth:{}:{}",
-            profile.pack.project.as_deref().unwrap_or(""),
-            profile.pack.version.as_deref().unwrap_or("latest")
-        ),
+    match profile.pack.as_ref() {
+        Some(pack) => match pack.provider {
+            PackProvider::Curseforge => format!(
+                "curseforge:{}:{}",
+                pack.project_id.unwrap_or(0),
+                pack.file_id.unwrap_or(0)
+            ),
+            PackProvider::Modrinth => format!(
+                "modrinth:{}:{}",
+                pack.project.as_deref().unwrap_or(""),
+                pack.version.as_deref().unwrap_or("latest")
+            ),
+        },
+        None => {
+            // Fingerprint of required CF pins so orphan cleanup refreshes on re-import.
+            let mut parts: Vec<String> = profile
+                .required_curseforge
+                .iter()
+                .map(|m| format!("{}:{}", m.project_id, m.file_id.unwrap_or(0)))
+                .collect();
+            parts.sort();
+            format!(
+                "manifest:{}:{}:{}",
+                profile.id,
+                profile.display_version,
+                parts.join(",")
+            )
+        }
     }
 }
 

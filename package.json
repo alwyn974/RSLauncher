@@ -8,6 +8,7 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "patches:apply": "node src-tauri/scripts/apply-patches.mjs",
+    "modpack:import-cf": "node src-tauri/scripts/import-curseforge-manifest.mjs",
     "tauri": "pnpm patches:apply && tauri",
     "tauri:dev": "pnpm patches:apply && tauri dev",
     "tauri:build": "pnpm patches:apply && tauri build"

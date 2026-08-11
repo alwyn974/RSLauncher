@@ -43,18 +43,23 @@ pub fn build_instance_for_with(pack_id: &str, settings: &Settings) -> VersionBui
     )
     .with_mod();
 
-    match profile.pack.provider {
-        PackProvider::Curseforge => {
-            let project_id = profile.pack.project_id.expect("validated at init");
-            let file_id = profile.pack.file_id.expect("validated at init");
-            mods = mods.with_curseforge_modpack(project_id, file_id);
-        }
-        PackProvider::Modrinth => {
-            let project = profile.pack.project.clone().expect("validated at init");
-            mods = mods.with_modrinth_modpack(ModpackSource::ModrinthPinned {
-                project,
-                version: profile.pack.version.clone(),
-            });
+    match &profile.pack {
+        Some(pack) => match pack.provider {
+            PackProvider::Curseforge => {
+                let project_id = pack.project_id.expect("validated at init");
+                let file_id = pack.file_id.expect("validated at init");
+                mods = mods.with_curseforge_modpack(project_id, file_id);
+            }
+            PackProvider::Modrinth => {
+                let project = pack.project.clone().expect("validated at init");
+                mods = mods.with_modrinth_modpack(ModpackSource::ModrinthPinned {
+                    project,
+                    version: pack.version.clone(),
+                });
+            }
+        },
+        None => {
+            // Manifest-only / extras-only pack: no hosted zip.
         }
     }
 

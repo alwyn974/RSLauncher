@@ -112,7 +112,10 @@ struct ProfileToml {
     pub fallback_ram_gb: u32,
     #[serde(default = "default_min_ram")]
     pub min_ram_gb: u32,
-    pub pack: PackSpec,
+    /// Hosted CurseForge / Modrinth pack zip. Omit for manifest-only packs
+    /// (mods listed under `[[required_curseforge]]` / `[[required_modrinth]]`).
+    #[serde(default)]
+    pub pack: Option<PackSpec>,
     pub server: ServerDefaults,
     #[serde(default)]
     pub required_curseforge: Vec<RequiredCurseForge>,
@@ -152,7 +155,7 @@ pub struct ModpackProfile {
     pub loader_version: String,
     pub fallback_ram_gb: u32,
     pub min_ram_gb: u32,
-    pub pack: PackSpec,
+    pub pack: Option<PackSpec>,
     pub server: ServerDefaults,
     pub required_curseforge: Vec<RequiredCurseForge>,
     pub required_modrinth: Vec<RequiredModrinth>,
@@ -162,11 +165,12 @@ pub struct ModpackProfile {
 
 impl ModpackProfile {
     pub fn curseforge_pack(&self) -> Option<(u32, u32, &str)> {
-        match self.pack.provider {
+        let pack = self.pack.as_ref()?;
+        match pack.provider {
             PackProvider::Curseforge => Some((
-                self.pack.project_id?,
-                self.pack.file_id?,
-                self.pack.file_name.as_deref().unwrap_or(""),
+                pack.project_id?,
+                pack.file_id?,
+                pack.file_name.as_deref().unwrap_or(""),
             )),
             PackProvider::Modrinth => None,
         }
@@ -458,21 +462,27 @@ fn parse_profile(pack_id: &str, toml_str: &str) -> Result<ModpackProfile, AppErr
 
     let loader = parse_loader(&raw.loader)?;
 
-    match raw.pack.provider {
-        PackProvider::Curseforge => {
-            if raw.pack.project_id.is_none() || raw.pack.file_id.is_none() {
-                return Err(AppError::msg(format!(
-                    "pack {pack_id}: curseforge pack needs project_id and file_id"
-                )));
+    if let Some(pack) = &raw.pack {
+        match pack.provider {
+            PackProvider::Curseforge => {
+                if pack.project_id.is_none() || pack.file_id.is_none() {
+                    return Err(AppError::msg(format!(
+                        "pack {pack_id}: curseforge pack needs project_id and file_id"
+                    )));
+                }
+            }
+            PackProvider::Modrinth => {
+                if pack.project.as_deref().unwrap_or("").is_empty() {
+                    return Err(AppError::msg(format!(
+                        "pack {pack_id}: modrinth pack needs project"
+                    )));
+                }
             }
         }
-        PackProvider::Modrinth => {
-            if raw.pack.project.as_deref().unwrap_or("").is_empty() {
-                return Err(AppError::msg(format!(
-                    "pack {pack_id}: modrinth pack needs project"
-                )));
-            }
-        }
+    } else if raw.required_curseforge.is_empty() && raw.required_modrinth.is_empty() {
+        return Err(AppError::msg(format!(
+            "pack {pack_id}: missing [pack] and has no required_curseforge / required_modrinth mods"
+        )));
     }
 
     let mut shaders = Vec::with_capacity(raw.shaders.len());

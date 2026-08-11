@@ -4,3 +4,7 @@ default = "atm10"
 [[packs]]
 id = "atm10"
 path = "packs/atm10.toml"
+
+[[packs]]
+id = "NSC"
+path = "packs/NSC.toml"
