@@ -175,6 +175,18 @@ async function openLauncherFolder() {
     </header>
 
     <main class="mx-auto mt-4 flex w-full max-w-lg min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-2">
+      <!-- Folders -->
+      <section class="mc-panel p-4">
+        <h2 class="font-pixel pixel-shadow-sm text-xs text-mc-gold">Folders</h2>
+        <p class="mt-2 text-xs text-mc-muted">
+          Open game files in your file manager.
+        </p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <PixelButton @click="openInstanceFolder">Instance folder</PixelButton>
+          <PixelButton @click="openLauncherFolder">RSLauncher folder</PixelButton>
+        </div>
+      </section>
+
       <!-- Memory -->
       <section class="mc-panel p-4">
         <h2 class="font-pixel pixel-shadow-sm text-xs text-mc-gold">Memory</h2>
@@ -430,18 +442,6 @@ async function openLauncherFolder() {
         <p class="mt-2 text-xs text-mc-muted">
           Appended to the launch command. -Xmx is set by the memory slider.
         </p>
-      </section>
-
-      <!-- Folders -->
-      <section class="mc-panel p-4">
-        <h2 class="font-pixel pixel-shadow-sm text-xs text-mc-gold">Folders</h2>
-        <p class="mt-2 text-xs text-mc-muted">
-          Open game files in your file manager.
-        </p>
-        <div class="mt-3 flex flex-wrap gap-2">
-          <PixelButton @click="openInstanceFolder">Instance folder</PixelButton>
-          <PixelButton @click="openLauncherFolder">RSLauncher folder</PixelButton>
-        </div>
       </section>
     </main>
 
