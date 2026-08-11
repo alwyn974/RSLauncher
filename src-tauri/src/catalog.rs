@@ -284,6 +284,22 @@ pub fn enabled_modrinth_optionals(settings: &Settings) -> Vec<(String, Option<St
     optional_mods()
         .iter()
         .filter(|m| is_optional_mod_enabled(settings, &m.id))
+        .filter(|m| !m.via_connector)
+        .filter_map(|m| match m.provider {
+            ModProvider::Modrinth => Some((m.project.clone()?, m.version.clone())),
+            ModProvider::Curseforge => None,
+        })
+        .collect()
+}
+
+/// Modrinth optionals marked `via_connector` (Fabric-on-NeoForge via Sinytra).
+pub fn enabled_modrinth_connector_optionals(
+    settings: &Settings,
+) -> Vec<(String, Option<String>)> {
+    optional_mods()
+        .iter()
+        .filter(|m| is_optional_mod_enabled(settings, &m.id))
+        .filter(|m| m.via_connector)
         .filter_map(|m| match m.provider {
             ModProvider::Modrinth => Some((m.project.clone()?, m.version.clone())),
             ModProvider::Curseforge => None,

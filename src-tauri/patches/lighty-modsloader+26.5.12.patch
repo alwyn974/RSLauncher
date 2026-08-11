@@ -1,5 +1,5 @@
 --- a/Cargo.toml	2006-07-24 05:21:28.000000000 +0400
-+++ b/Cargo.toml	2026-08-11 19:51:39.176068209 +0400
++++ b/Cargo.toml	2026-08-12 00:17:31.057105476 +0400
 @@ -39,6 +39,14 @@
  events = ["dep:lighty-event"]
  modrinth = []
@@ -16,7 +16,7 @@
  [lib]
  name = "lighty_modsloader"
 --- a/src/curseforge/api.rs	2006-07-24 05:21:28.000000000 +0400
-+++ b/src/curseforge/api.rs	2026-08-11 19:51:39.176097693 +0400
++++ b/src/curseforge/api.rs	2026-08-12 00:17:31.057105476 +0400
 @@ -36,6 +36,40 @@
      })
  }
@@ -59,7 +59,7 @@
  pub fn url_encode(input: &str) -> String {
      let mut out = String::with_capacity(input.len() + 8);
 --- a/src/curseforge/client.rs	2006-07-24 05:21:28.000000000 +0400
-+++ b/src/curseforge/client.rs	2026-08-11 19:51:39.176128719 +0400
++++ b/src/curseforge/client.rs	2026-08-12 00:17:31.057138685 +0400
 @@ -76,7 +76,15 @@
                      .await?
              };
@@ -96,7 +96,7 @@
          .hashes
          .iter()
 --- a/src/curseforge/modpack.rs	2006-07-24 05:21:28.000000000 +0400
-+++ b/src/curseforge/modpack.rs	2026-08-11 19:51:39.176148008 +0400
++++ b/src/curseforge/modpack.rs	2026-08-12 00:17:31.057151507 +0400
 @@ -17,10 +17,11 @@
      match source {
          ModpackSource::CurseForgePinned { project_id, file_id } => {
@@ -114,7 +114,7 @@
          _ => Err(QueryError::Conversion {
              message: "resolve_cf_modpack_url called with a non-CurseForge source".into(),
 --- a/src/curseforge/mod.rs	2006-07-24 05:21:28.000000000 +0400
-+++ b/src/curseforge/mod.rs	2026-08-11 19:51:39.176161266 +0400
++++ b/src/curseforge/mod.rs	2026-08-12 00:17:31.057164339 +0400
 @@ -9,5 +9,5 @@
  pub mod modpack;
  pub mod modpack_metadata;
@@ -122,3 +122,343 @@
 -pub use api::set_api_key;
 +pub use api::{forgecdn_download_url, resolve_file_download_url, set_api_key};
  pub use client::{fetch, fetch_pinned_file, CurseForgeKey, CURSEFORGE_CACHE};
+--- a/src/modrinth/client_metadata.rs	2006-07-24 05:21:28.000000000 +0400
++++ b/src/modrinth/client_metadata.rs	2026-08-12 00:17:31.057164339 +0400
+@@ -8,6 +8,8 @@
+ #[derive(Debug, Deserialize)]
+ pub struct ModrinthProject {
+     pub project_type: String,
++    #[serde(default)]
++    pub title: String,
+ }
+ 
+ #[derive(Debug, Deserialize)]
+--- a/src/modrinth/client.rs	2006-07-24 05:21:28.000000000 +0400
++++ b/src/modrinth/client.rs	2026-08-12 00:17:40.712962869 +0400
+@@ -17,9 +17,12 @@
+ use once_cell::sync::Lazy;
+ 
+ use super::api::{url_encode, BASE_URL, PROVIDER, USER_AGENT};
+-use super::client_metadata::{ModrinthDependency, ModrinthFile, ModrinthProject, ModrinthVersion};
++use super::client_metadata::{ModrinthFile, ModrinthProject, ModrinthVersion};
+ use crate::request::ModRequest;
+ 
++/// Fabric API project id / slug — replaced by Forgified Fabric API under Connector.
++const FABRIC_API_IDS: &[&str] = &["P7dR8mSH", "fabric-api"];
++
+ /// Cache key — granularity = anything that changes the API response.
+ #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+ pub struct ModrinthKey {
+@@ -27,16 +30,21 @@
+     pub pin: Option<String>,
+     pub mc: String,
+     pub loader: Loader,
++    pub via_connector: bool,
+ }
+ 
+ /// Process-wide cache of resolved Modrinth fetches.
+ pub static MODRINTH_CACHE: Lazy<Cache<ModrinthKey, Arc<(Mods, Vec<ModRequest>)>>> =
+     Lazy::new(Cache::with_smart_cleanup);
+ 
+-/// Project-type cache keyed by slug/id. The type never changes for a
+-/// given project, so a single round-trip is amortized across every
+-/// version fetched for that project.
+-static PROJECT_TYPE_CACHE: Lazy<Cache<String, Arc<String>>> =
++#[derive(Debug, Clone)]
++struct ProjectInfo {
++    project_type: String,
++    title: String,
++}
++
++/// Project info cache keyed by slug/id.
++static PROJECT_INFO_CACHE: Lazy<Cache<String, Arc<ProjectInfo>>> =
+     Lazy::new(Cache::with_smart_cleanup);
+ 
+ /// Resolves a single `ModRequest::Modrinth { … }` into a pivot
+@@ -47,39 +55,69 @@
+     loader: &Loader,
+     ttl: Duration,
+ ) -> Result<(Mods, Vec<ModRequest>), QueryError> {
+-    let (id_or_slug, pinned_version) = match request {
+-        ModRequest::Modrinth { id_or_slug, version } => (id_or_slug.clone(), version.clone()),
++    let (id_or_slug, pinned_version, via_connector) = match request {
++        ModRequest::Modrinth {
++            id_or_slug,
++            version,
++            via_connector,
++        } => (id_or_slug.clone(), version.clone(), *via_connector),
+         _ => unreachable!("modrinth::fetch called with a non-Modrinth request"),
+     };
+ 
++    let effective_loader = effective_loader(loader, via_connector);
++
+     let key = ModrinthKey {
+         id_or_slug: id_or_slug.clone(),
+         pin: pinned_version.clone(),
+         mc: minecraft_version.to_string(),
+-        loader: loader.clone(),
++        loader: effective_loader.clone(),
++        via_connector,
+     };
+-    let loader_for_fetch = loader.clone();
+ 
+     let cached = MODRINTH_CACHE
+         .get_or_try_insert_with(key, ttl, || async move {
+-            let subdir = install_subdir(&project_type(&id_or_slug, ttl).await?)?;
++            let info = project_info(&id_or_slug, ttl).await?;
++            let subdir = install_subdir(&info.project_type)?;
++            let is_pinned = pinned_version.is_some();
+             let version = if let Some(version_id) = pinned_version {
+-                fetch_pinned_version(&version_id).await?
++                fetch_pinned_version(&version_id, &info.title).await?
+             } else {
+-                let loader_tag = loader_tag(&loader_for_fetch)?;
+-                fetch_latest_compatible(&id_or_slug, minecraft_version, loader_tag).await?
++                let loader_tag = loader_tag(&effective_loader)?;
++                fetch_latest_compatible(
++                    &id_or_slug,
++                    &info.title,
++                    minecraft_version,
++                    loader_tag,
++                )
++                .await?
+             };
+             let pivot = into_pivot(&id_or_slug, &version, subdir)?;
+-            let dependencies = collect_required_dependencies(&version);
++            let dependencies = collect_dependencies(&version, via_connector, is_pinned);
+             Ok::<_, QueryError>(Arc::new((pivot, dependencies)))
+         })
+         .await?;
+ 
+-    // The cache stores Arc<(Mods, Vec<ModRequest>)>; the resolver consumes
+-    // an owned tuple. Single Arc clone, then clone the inner data once.
+     Ok((*cached).clone())
+ }
+ 
++/// Under Connector, Fabric mods on Forge/NeoForge resolve as Fabric.
++fn effective_loader(loader: &Loader, via_connector: bool) -> Loader {
++    if via_connector {
++        match loader {
++            Loader::NeoForge | Loader::Forge => Loader::Fabric,
++            other => other.clone(),
++        }
++    } else {
++        loader.clone()
++    }
++}
++
++fn is_fabric_api(project_id: &str) -> bool {
++    FABRIC_API_IDS
++        .iter()
++        .any(|id| id.eq_ignore_ascii_case(project_id))
++}
++
+ /// Maps a [`Loader`] to its Modrinth loader-tag string.
+ fn loader_tag(loader: &Loader) -> Result<&'static str, QueryError> {
+     match loader {
+@@ -96,13 +134,16 @@
+     }
+ }
+ 
+-async fn fetch_pinned_version(version_id: &str) -> Result<ModrinthVersion, QueryError> {
++async fn fetch_pinned_version(
++    version_id: &str,
++    project_title: &str,
++) -> Result<ModrinthVersion, QueryError> {
+     let url = format!("{}/version/{}", BASE_URL, version_id);
+     let response = CLIENT.get(&url).header("User-Agent", USER_AGENT).send().await?;
+     if response.status() == reqwest::StatusCode::NOT_FOUND {
+         return Err(QueryError::ModNotFound {
+             provider: PROVIDER,
+-            id: version_id.to_string(),
++            id: format!("{project_title} ({version_id})"),
+         });
+     }
+     Ok(response.error_for_status()?.json::<ModrinthVersion>().await?)
+@@ -110,10 +151,10 @@
+ 
+ async fn fetch_latest_compatible(
+     slug: &str,
++    title: &str,
+     minecraft_version: &str,
+     loader_tag: &str,
+ ) -> Result<ModrinthVersion, QueryError> {
+-    // Query-string arrays use JSON encoding per Modrinth's docs.
+     let loaders_param = url_encode(&format!("[\"{}\"]", loader_tag));
+     let game_versions_param = url_encode(&format!("[\"{}\"]", minecraft_version));
+     let url = format!(
+@@ -125,7 +166,7 @@
+     if response.status() == reqwest::StatusCode::NOT_FOUND {
+         return Err(QueryError::ModNotFound {
+             provider: PROVIDER,
+-            id: slug.to_string(),
++            id: title.to_string(),
+         });
+     }
+     let versions = response.error_for_status()?.json::<Vec<ModrinthVersion>>().await?;
+@@ -134,14 +175,12 @@
+         .next()
+         .ok_or_else(|| QueryError::ModIncompatible {
+             provider: PROVIDER,
+-            id: slug.to_string(),
++            id: title.to_string(),
+             mc: minecraft_version.to_string(),
+             loader: loader_tag.to_string(),
+         })
+ }
+ 
+-/// Picks the binary file from a version and converts it into the pivot [`Mods`].
+-/// `subdir` is the runtime-relative folder (`"mods"`, `"resourcepacks"`, …).
+ fn into_pivot(slug: &str, version: &ModrinthVersion, subdir: &str) -> Result<Mods, QueryError> {
+     let file = primary_file(&version.files).ok_or_else(|| QueryError::MissingField {
+         field: format!("file in modrinth version {}", version.id),
+@@ -155,8 +194,6 @@
+     })
+ }
+ 
+-/// Maps a Modrinth `project_type` to the runtime sub-folder used by the
+-/// installer. Unknown types surface a clear `UnsupportedFormat` error.
+ fn install_subdir(project_type: &str) -> Result<&'static str, QueryError> {
+     match project_type {
+         "mod" => Ok("mods"),
+@@ -176,13 +213,10 @@
+     }
+ }
+ 
+-/// Fetches `/project/{slug}` and returns its `project_type`. Results are
+-/// memoized in [`PROJECT_TYPE_CACHE`] for `ttl` to amortize the extra
+-/// round-trip across versions of the same project.
+-async fn project_type(id_or_slug: &str, ttl: Duration) -> Result<String, QueryError> {
++async fn project_info(id_or_slug: &str, ttl: Duration) -> Result<ProjectInfo, QueryError> {
+     let key = id_or_slug.to_string();
+     let slug = id_or_slug.to_string();
+-    let cached = PROJECT_TYPE_CACHE
++    let cached = PROJECT_INFO_CACHE
+         .get_or_try_insert_with(key, ttl, || async move {
+             let url = format!("{}/project/{}", BASE_URL, slug);
+             let response = CLIENT.get(&url).header("User-Agent", USER_AGENT).send().await?;
+@@ -193,37 +227,62 @@
+                 });
+             }
+             let project: ModrinthProject = response.error_for_status()?.json().await?;
+-            Ok::<_, QueryError>(Arc::new(project.project_type))
++            Ok::<_, QueryError>(Arc::new(ProjectInfo {
++                project_type: project.project_type,
++                title: if project.title.is_empty() {
++                    slug
++                } else {
++                    project.title
++                },
++            }))
+         })
+         .await?;
+     Ok((*cached).clone())
+ }
+ 
+-/// Selects the build artifact among a version's `files` array.
+ fn primary_file(files: &[ModrinthFile]) -> Option<&ModrinthFile> {
+     files.iter().find(|f| f.primary).or_else(|| files.first())
+ }
+ 
+-/// Picks every `required` dependency of `version`, dropping the rest.
+-fn collect_required_dependencies(version: &ModrinthVersion) -> Vec<ModRequest> {
++/// Dependency policy:
++/// - `via_connector`: walk required deps as Fabric-via-Connector; drop Fabric API
++///   (Forgified Fabric API is listed explicitly in the pack).
++/// - pinned non-connector: skip auto-deps (curated TOML already names every jar).
++/// - unpinned non-connector: walk required deps normally.
++fn collect_dependencies(
++    version: &ModrinthVersion,
++    via_connector: bool,
++    is_pinned: bool,
++) -> Vec<ModRequest> {
++    if is_pinned && !via_connector {
++        return Vec::new();
++    }
++
+     version
+         .dependencies
+         .iter()
+         .filter(|dep| dep.dependency_type == "required")
+-        .filter_map(|dep| modrequest_from(dep, &version.id))
++        .filter_map(|dep| {
++            let project_id = dep.project_id.clone().or_else(|| {
++                lighty_core::trace_debug!(
++                    parent_version = %version.id,
++                    "Skipping Modrinth dep with no project_id"
++                );
++                None
++            })?;
++            if via_connector && is_fabric_api(&project_id) {
++                lighty_core::trace_debug!(
++                    parent_version = %version.id,
++                    dep = %project_id,
++                    "Skipping Fabric API dep (Connector uses Forgified Fabric API)"
++                );
++                return None;
++            }
++            Some(ModRequest::Modrinth {
++                id_or_slug: project_id,
++                version: dep.version_id.clone(),
++                via_connector,
++            })
++        })
+         .collect()
+ }
+-
+-fn modrequest_from(dep: &ModrinthDependency, parent_version: &str) -> Option<ModRequest> {
+-    let project_id = dep.project_id.clone().or_else(|| {
+-        lighty_core::trace_debug!(
+-            parent_version = %parent_version,
+-            "Skipping Modrinth dep with no project_id"
+-        );
+-        None
+-    })?;
+-    Some(ModRequest::Modrinth {
+-        id_or_slug: project_id,
+-        version: dep.version_id.clone(),
+-    })
+-}
+--- a/src/request.rs	2006-07-24 05:21:28.000000000 +0400
++++ b/src/request.rs	2026-08-12 00:17:31.057182522 +0400
+@@ -12,6 +12,10 @@
+     Modrinth {
+         id_or_slug: String,
+         version: Option<String>,
++        /// Fabric mod intended to run on Forge/NeoForge via Sinytra Connector.
++        /// Resolve against the `fabric` loader and skip Fabric API deps (replaced
++        /// by Forgified Fabric API in the pack).
++        via_connector: bool,
+     },
+     CurseForge {
+         mod_id: u32,
+@@ -19,6 +23,29 @@
+     },
+ }
+ 
++impl ModRequest {
++    /// Convenience constructor for a normal (non-Connector) Modrinth mod.
++    pub fn modrinth(id_or_slug: impl Into<String>, version: Option<String>) -> Self {
++        Self::Modrinth {
++            id_or_slug: id_or_slug.into(),
++            version,
++            via_connector: false,
++        }
++    }
++
++    /// Fabric mod resolved for a Connector-enabled Forge/NeoForge instance.
++    pub fn modrinth_via_connector(
++        id_or_slug: impl Into<String>,
++        version: Option<String>,
++    ) -> Self {
++        Self::Modrinth {
++            id_or_slug: id_or_slug.into(),
++            version,
++            via_connector: true,
++        }
++    }
++}
++
+ /// Source tag — used for dedup keys and error messages.
+ #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+ pub enum ModSource {

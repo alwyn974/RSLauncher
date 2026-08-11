@@ -1329,6 +1329,7 @@ id = "axiom"
 name = "Axiom"
 description = "The all-in-one tool for editing Minecraft Worlds."
 default_enabled = false
+via_connector = true
 provider = "modrinth"
 project = "axiom"
 version = "BzK22yyR"

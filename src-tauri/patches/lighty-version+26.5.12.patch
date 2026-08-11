@@ -1,0 +1,56 @@
+--- a/src/lighty_builder.rs	2006-07-24 05:21:28.000000000 +0400
++++ b/src/lighty_builder.rs	2026-08-12 00:15:32.441540175 +0400
+@@ -192,6 +192,25 @@
+             self.pending.push(ModRequest::Modrinth {
+                 id_or_slug: id_or_slug.into(),
+                 version,
++                via_connector: false,
++            });
++        }
++        self
++    }
++
++    /// Like [`Self::with_modrinth_mods`], but marks entries as Fabric mods that
++    /// run on Forge/NeoForge through Sinytra Connector (resolve as `fabric`,
++    /// skip Fabric API deps in favour of Forgified Fabric API).
++    #[cfg(feature = "modrinth")]
++    pub fn with_modrinth_connector_mods<S>(mut self, list: Vec<(S, Option<String>)>) -> Self
++    where
++        S: Into<String>,
++    {
++        for (id_or_slug, version) in list {
++            self.pending.push(ModRequest::Modrinth {
++                id_or_slug: id_or_slug.into(),
++                version,
++                via_connector: true,
+             });
+         }
+         self
+--- a/src/version_builder.rs	2006-07-24 05:21:28.000000000 +0400
++++ b/src/version_builder.rs	2026-08-12 00:15:33.073547357 +0400
+@@ -315,6 +315,25 @@
+             self.pending.push(ModRequest::Modrinth {
+                 id_or_slug: id_or_slug.into(),
+                 version,
++                via_connector: false,
++            });
++        }
++        self
++    }
++
++    /// Like [`Self::with_modrinth_mods`], but marks entries as Fabric mods that
++    /// run on Forge/NeoForge through Sinytra Connector (resolve as `fabric`,
++    /// skip Fabric API deps in favour of Forgified Fabric API).
++    #[cfg(feature = "modrinth")]
++    pub fn with_modrinth_connector_mods<S>(mut self, list: Vec<(S, Option<String>)>) -> Self
++    where
++        S: Into<String>,
++    {
++        for (id_or_slug, version) in list {
++            self.pending.push(ModRequest::Modrinth {
++                id_or_slug: id_or_slug.into(),
++                version,
++                via_connector: true,
+             });
+         }
+         self

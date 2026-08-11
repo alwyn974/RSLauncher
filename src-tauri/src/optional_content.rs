@@ -112,9 +112,10 @@ pub(crate) async fn resolve_jar_filename(entry: &OptionalModSpec) -> Result<Stri
             let project = entry.project.as_deref().ok_or_else(|| {
                 AppError::msg(format!("optional mod {} needs a Modrinth project", entry.id))
             })?;
-            let request = ModRequest::Modrinth {
-                id_or_slug: project.to_string(),
-                version: entry.version.clone(),
+            let request = if entry.via_connector {
+                ModRequest::modrinth_via_connector(project.to_string(), entry.version.clone())
+            } else {
+                ModRequest::modrinth(project.to_string(), entry.version.clone())
             };
             let (resolved, _deps) = modrinth::fetch(
                 &request,

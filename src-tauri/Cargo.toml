@@ -66,5 +66,6 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 # Remove once upstream Lighty ships the ForgeCDN downloadUrl fallback.
 [patch.crates-io]
 lighty-modsloader = { path = "./patched/lighty-modsloader-26.5.12" }
+lighty-version = { path = "./patched/lighty-version-26.5.12" }
 lighty-launch = { path = "./patched/lighty-launch-26.5.12" }
 lighty-java = { path = "./patched/lighty-java-26.5.12" }
