@@ -174,6 +174,8 @@ pub fn run() {
             commands::settings::set_active_modpack,
             commands::settings::get_active_modpack,
             commands::settings::get_memory_info,
+            commands::settings::open_instance_folder,
+            commands::settings::open_launcher_folder,
             commands::launch::get_instance_status,
             commands::launch::play,
             commands::launch::cancel,

@@ -3,6 +3,7 @@
  * Settings: RAM, resolution, server, optional mods, shader presets, JVM args.
  */
 import { computed, reactive } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import { launcher, type Settings } from "../stores/launcher";
 import PixelButton from "../components/PixelButton.vue";
 import PixelIcon from "../components/PixelIcon.vue";
@@ -80,6 +81,22 @@ function reset() {
   draft.enabledShaderVariants = Object.fromEntries(
     launcher.state.catalog.shaderVariants.map((s) => [s.id, s.defaultEnabled]),
   );
+}
+
+async function openInstanceFolder() {
+  try {
+    await invoke("open_instance_folder");
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function openLauncherFolder() {
+  try {
+    await invoke("open_launcher_folder");
+  } catch (e) {
+    console.error(e);
+  }
 }
 </script>
 
@@ -277,6 +294,18 @@ function reset() {
         <p class="mt-2 text-xs text-mc-muted">
           Appended to the launch command. -Xmx is set by the memory slider.
         </p>
+      </section>
+
+      <!-- Folders -->
+      <section class="mc-panel p-4">
+        <h2 class="font-pixel pixel-shadow-sm text-xs text-mc-gold">Folders</h2>
+        <p class="mt-2 text-xs text-mc-muted">
+          Open game files in your file manager.
+        </p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <PixelButton @click="openInstanceFolder">Instance folder</PixelButton>
+          <PixelButton @click="openLauncherFolder">RSLauncher folder</PixelButton>
+        </div>
       </section>
     </main>
 
