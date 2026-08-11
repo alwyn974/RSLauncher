@@ -80,6 +80,22 @@ pub struct OptionalModSpec {
     pub version: Option<String>,
 }
 
+/// Group of optional mods toggled together in Settings.
+///
+/// Members stay as `[[optional]]` entries (download source of truth). Bundle ON
+/// means every id in `required` is enabled; non-required members stay free.
+#[derive(Debug, Clone, Deserialize)]
+pub struct BundleSpec {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    #[serde(default)]
+    pub default_enabled: bool,
+    pub mods: Vec<String>,
+    #[serde(default)]
+    pub required: Vec<String>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct ShaderSpecRaw {
     pub id: String,
@@ -124,6 +140,8 @@ struct ProfileToml {
     #[serde(default)]
     pub optional: Vec<OptionalModSpec>,
     #[serde(default)]
+    pub bundle: Vec<BundleSpec>,
+    #[serde(default)]
     pub shaders: Vec<ShaderSpecRaw>,
 }
 
@@ -160,6 +178,7 @@ pub struct ModpackProfile {
     pub required_curseforge: Vec<RequiredCurseForge>,
     pub required_modrinth: Vec<RequiredModrinth>,
     pub optional: Vec<OptionalModSpec>,
+    pub bundles: Vec<BundleSpec>,
     pub shaders: Vec<ShaderVariant>,
 }
 
@@ -516,6 +535,9 @@ fn parse_profile(pack_id: &str, toml_str: &str) -> Result<ModpackProfile, AppErr
         });
     }
 
+    let optional_ids: std::collections::HashSet<&str> =
+        raw.optional.iter().map(|m| m.id.as_str()).collect();
+
     for opt in &raw.optional {
         match opt.provider {
             ModProvider::Curseforge => {
@@ -533,6 +555,38 @@ fn parse_profile(pack_id: &str, toml_str: &str) -> Result<ModpackProfile, AppErr
                         opt.id
                     )));
                 }
+            }
+        }
+    }
+
+    let mut claimed_mods: HashMap<&str, &str> = HashMap::new();
+    for bundle in &raw.bundle {
+        if bundle.mods.is_empty() {
+            return Err(AppError::msg(format!(
+                "pack {pack_id}: bundle {} needs at least one mod",
+                bundle.id
+            )));
+        }
+        for mod_id in &bundle.mods {
+            if !optional_ids.contains(mod_id.as_str()) {
+                return Err(AppError::msg(format!(
+                    "pack {pack_id}: bundle {} references unknown optional {mod_id}",
+                    bundle.id
+                )));
+            }
+            if let Some(other) = claimed_mods.insert(mod_id.as_str(), bundle.id.as_str()) {
+                return Err(AppError::msg(format!(
+                    "pack {pack_id}: optional {mod_id} is in bundles {other} and {}",
+                    bundle.id
+                )));
+            }
+        }
+        for req in &bundle.required {
+            if !bundle.mods.iter().any(|m| m == req) {
+                return Err(AppError::msg(format!(
+                    "pack {pack_id}: bundle {} required {req} is not in mods",
+                    bundle.id
+                )));
             }
         }
     }
@@ -558,6 +612,7 @@ fn parse_profile(pack_id: &str, toml_str: &str) -> Result<ModpackProfile, AppErr
         required_curseforge: raw.required_curseforge,
         required_modrinth: raw.required_modrinth,
         optional: raw.optional,
+        bundles: raw.bundle,
         shaders,
     })
 }

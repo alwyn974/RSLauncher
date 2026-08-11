@@ -3,22 +3,53 @@
  * Settings: RAM, resolution, server, optional mods, shader presets, JVM args.
  */
 import { computed, reactive } from "vue";
-import { launcher, type Settings } from "../stores/launcher";
+import { invoke } from "@tauri-apps/api/core";
+import {
+  launcher,
+  type OptionalBundleInfo,
+  type Settings,
+} from "../stores/launcher";
 import PixelButton from "../components/PixelButton.vue";
 import PixelIcon from "../components/PixelIcon.vue";
 
-function materializeToggles(): Pick<Settings, "enabledOptionalMods" | "enabledShaderVariants"> {
+function materializeOptionalDefaults(): Record<string, boolean> {
   const optional: Record<string, boolean> = {};
   for (const mod of launcher.state.catalog.optionalMods) {
     optional[mod.id] =
       launcher.state.settings.enabledOptionalMods[mod.id] ?? mod.defaultEnabled;
   }
+  for (const bundle of launcher.state.catalog.optionalBundles) {
+    for (const mod of bundle.mods) {
+      optional[mod.id] =
+        launcher.state.settings.enabledOptionalMods[mod.id] ?? mod.defaultEnabled;
+    }
+  }
+  return optional;
+}
+
+function resetOptionalDefaults(): Record<string, boolean> {
+  const optional: Record<string, boolean> = {};
+  for (const mod of launcher.state.catalog.optionalMods) {
+    optional[mod.id] = mod.defaultEnabled;
+  }
+  for (const bundle of launcher.state.catalog.optionalBundles) {
+    for (const mod of bundle.mods) {
+      optional[mod.id] = mod.defaultEnabled;
+    }
+  }
+  return optional;
+}
+
+function materializeToggles(): Pick<Settings, "enabledOptionalMods" | "enabledShaderVariants"> {
   const shaders: Record<string, boolean> = {};
   for (const shader of launcher.state.catalog.shaderVariants) {
     shaders[shader.id] =
       launcher.state.settings.enabledShaderVariants[shader.id] ?? shader.defaultEnabled;
   }
-  return { enabledOptionalMods: optional, enabledShaderVariants: shaders };
+  return {
+    enabledOptionalMods: materializeOptionalDefaults(),
+    enabledShaderVariants: shaders,
+  };
 }
 
 const draft = reactive<Settings>({
@@ -36,10 +67,42 @@ const ramRecommended = computed(() =>
 );
 
 const optionalMods = computed(() => launcher.state.catalog.optionalMods);
+const optionalBundles = computed(() => launcher.state.catalog.optionalBundles);
 const shaderVariants = computed(() => launcher.state.catalog.shaderVariants);
+const hasOptionalContent = computed(
+  () => optionalMods.value.length > 0 || optionalBundles.value.length > 0,
+);
+
+function isBundleEnabledDraft(bundle: OptionalBundleInfo): boolean {
+  const required = bundle.mods.filter((m) => m.required);
+  const ids = required.length > 0 ? required : bundle.mods;
+  return ids.every((m) => !!draft.enabledOptionalMods[m.id]);
+}
+
+function isBundleMemberLocked(bundle: OptionalBundleInfo, modId: string): boolean {
+  const member = bundle.mods.find((m) => m.id === modId);
+  return !!member?.required && isBundleEnabledDraft(bundle);
+}
+
+function isBundleIndeterminate(bundle: OptionalBundleInfo): boolean {
+  if (!isBundleEnabledDraft(bundle)) return false;
+  return bundle.mods.some((m) => !draft.enabledOptionalMods[m.id]);
+}
 
 function toggleOptional(id: string) {
   draft.enabledOptionalMods[id] = !draft.enabledOptionalMods[id];
+}
+
+function toggleBundle(bundle: OptionalBundleInfo) {
+  const next = !isBundleEnabledDraft(bundle);
+  for (const mod of bundle.mods) {
+    draft.enabledOptionalMods[mod.id] = next;
+  }
+}
+
+function toggleBundleMember(bundle: OptionalBundleInfo, modId: string) {
+  if (isBundleMemberLocked(bundle, modId)) return;
+  toggleOptional(modId);
 }
 
 function toggleShader(id: string) {
@@ -74,12 +137,26 @@ async function save() {
 function reset() {
   const next = launcher.resetSettings();
   Object.assign(draft, next);
-  draft.enabledOptionalMods = Object.fromEntries(
-    launcher.state.catalog.optionalMods.map((m) => [m.id, m.defaultEnabled]),
-  );
+  draft.enabledOptionalMods = resetOptionalDefaults();
   draft.enabledShaderVariants = Object.fromEntries(
     launcher.state.catalog.shaderVariants.map((s) => [s.id, s.defaultEnabled]),
   );
+}
+
+async function openInstanceFolder() {
+  try {
+    await invoke("open_instance_folder");
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function openLauncherFolder() {
+  try {
+    await invoke("open_launcher_folder");
+  } catch (e) {
+    console.error(e);
+  }
 }
 </script>
 
@@ -98,6 +175,18 @@ function reset() {
     </header>
 
     <main class="mx-auto mt-4 flex w-full max-w-lg min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-2">
+      <!-- Folders -->
+      <section class="mc-panel p-4">
+        <h2 class="font-pixel pixel-shadow-sm text-xs text-mc-gold">Folders</h2>
+        <p class="mt-2 text-xs text-mc-muted">
+          Open game files in your file manager.
+        </p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <PixelButton @click="openInstanceFolder">Instance folder</PixelButton>
+          <PixelButton @click="openLauncherFolder">RSLauncher folder</PixelButton>
+        </div>
+      </section>
+
       <!-- Memory -->
       <section class="mc-panel p-4">
         <h2 class="font-pixel pixel-shadow-sm text-xs text-mc-gold">Memory</h2>
@@ -193,13 +282,89 @@ function reset() {
         </p>
       </section>
 
-      <!-- Optional mods -->
-      <section v-if="optionalMods.length" class="mc-panel p-4">
+      <!-- Optional mods + bundles -->
+      <section v-if="hasOptionalContent" class="mc-panel p-4">
         <h2 class="font-pixel pixel-shadow-sm text-xs text-mc-gold">Optional mods</h2>
         <p class="mt-2 text-xs text-mc-muted">
           Unchecked mods are kept on disk as <span class="font-mono">.jar.disabled</span>.
+          Bundles turn related mods on together; required members stay locked while the bundle is on.
         </p>
         <ul class="mt-3 flex flex-col gap-2">
+          <li
+            v-for="bundle in optionalBundles"
+            :key="bundle.id"
+            class="flex flex-col gap-1"
+          >
+            <div
+              class="flex cursor-pointer items-start gap-2 p-1.5 transition-colors duration-150 hover:bg-mc-panel-2"
+              @click="toggleBundle(bundle)"
+            >
+              <button
+                type="button"
+                role="checkbox"
+                :aria-checked="isBundleEnabledDraft(bundle)"
+                :aria-valuetext="isBundleIndeterminate(bundle) ? 'mixed' : undefined"
+                class="mc-inset-well mt-0.5 flex size-5 shrink-0 cursor-pointer items-center justify-center"
+                @click.stop="toggleBundle(bundle)"
+              >
+                <span
+                  v-if="isBundleEnabledDraft(bundle) && !isBundleIndeterminate(bundle)"
+                  class="size-2.5 bg-mc-gold"
+                />
+                <span
+                  v-else-if="isBundleIndeterminate(bundle)"
+                  class="h-0.5 w-2.5 bg-mc-gold"
+                />
+              </button>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm text-mc-text">{{ bundle.name }}</p>
+                <p class="text-xs text-mc-muted">{{ bundle.description }}</p>
+              </div>
+            </div>
+            <ul class="ml-4 flex flex-col gap-1 border-l border-mc-panel-2 pl-3">
+              <li
+                v-for="mod in bundle.mods"
+                :key="mod.id"
+                class="flex items-start gap-2 p-1.5 transition-colors duration-150"
+                :class="
+                  isBundleMemberLocked(bundle, mod.id)
+                    ? 'cursor-not-allowed opacity-60'
+                    : 'cursor-pointer hover:bg-mc-panel-2'
+                "
+                @click="toggleBundleMember(bundle, mod.id)"
+              >
+                <button
+                  type="button"
+                  role="checkbox"
+                  :aria-checked="!!draft.enabledOptionalMods[mod.id]"
+                  :aria-disabled="isBundleMemberLocked(bundle, mod.id)"
+                  class="mc-inset-well mt-0.5 flex size-5 shrink-0 items-center justify-center"
+                  :class="
+                    isBundleMemberLocked(bundle, mod.id)
+                      ? 'cursor-not-allowed'
+                      : 'cursor-pointer'
+                  "
+                  @click.stop="toggleBundleMember(bundle, mod.id)"
+                >
+                  <span
+                    v-if="draft.enabledOptionalMods[mod.id]"
+                    class="size-2.5 bg-mc-gold"
+                  />
+                </button>
+                <div class="min-w-0 flex-1">
+                  <p class="text-sm text-mc-text">
+                    {{ mod.name }}
+                    <span
+                      v-if="mod.required"
+                      class="ml-1 text-[10px] uppercase tracking-wide text-mc-faint"
+                    >required</span>
+                  </p>
+                  <p class="text-xs text-mc-muted">{{ mod.description }}</p>
+                </div>
+              </li>
+            </ul>
+          </li>
+
           <li
             v-for="mod in optionalMods"
             :key="mod.id"

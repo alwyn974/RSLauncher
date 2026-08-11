@@ -50,6 +50,26 @@ export interface OptionalModInfo {
   enabled: boolean;
 }
 
+export interface BundleMemberInfo {
+  id: string;
+  name: string;
+  description: string;
+  source: string;
+  defaultEnabled: boolean;
+  required: boolean;
+  enabled: boolean;
+  locked: boolean;
+}
+
+export interface OptionalBundleInfo {
+  id: string;
+  name: string;
+  description: string;
+  defaultEnabled: boolean;
+  enabled: boolean;
+  mods: BundleMemberInfo[];
+}
+
 export interface ShaderVariantInfo {
   id: string;
   name: string;
@@ -84,6 +104,7 @@ export interface ModpackListEntry {
 export interface Catalog {
   modpack: ModpackInfo;
   optionalMods: OptionalModInfo[];
+  optionalBundles: OptionalBundleInfo[];
   shaderVariants: ShaderVariantInfo[];
 }
 
@@ -205,6 +226,7 @@ interface LauncherState {
 const EMPTY_CATALOG: Catalog = {
   modpack: { ...EMPTY_MODPACK },
   optionalMods: [],
+  optionalBundles: [],
   shaderVariants: [],
 };
 

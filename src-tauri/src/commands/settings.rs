@@ -1,3 +1,5 @@
+use std::fs;
+
 use lighty_launcher::prelude::*;
 use tauri::{AppHandle, Emitter};
 
@@ -8,6 +10,12 @@ use crate::modpack;
 use crate::modpack_meta;
 use crate::modpack_profile;
 use crate::optional_content;
+
+fn open_dir(path: &std::path::Path) -> Result<(), AppError> {
+    fs::create_dir_all(path)?;
+    tauri_plugin_opener::open_path(path, None::<&str>)
+        .map_err(|err| AppError::msg(err.to_string()))
+}
 
 #[tauri::command]
 pub async fn get_settings() -> Result<Settings, AppError> {
@@ -89,4 +97,16 @@ pub async fn get_memory_info(app: AppHandle) -> MemoryInfo {
     }
 
     info
+}
+
+/// Open the active instance game directory in the system file manager.
+#[tauri::command]
+pub async fn open_instance_folder() -> Result<(), AppError> {
+    open_dir(modpack::build_instance().game_dirs())
+}
+
+/// Open the RSLauncher data directory (parent of all instances).
+#[tauri::command]
+pub async fn open_launcher_folder() -> Result<(), AppError> {
+    open_dir(AppState::data_dir())
 }
