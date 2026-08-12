@@ -1312,8 +1312,8 @@ name = "Borderless Window"
 description = "Borderless fullscreen with a 3-mode system and configurable F11"
 default_enabled = true
 provider = "curseforge"
-project_id = 378979
-file_id = 7604034
+project_id = 1605714
+file_id = 8580066
 
 [[optional]]
 id = "concentration"
