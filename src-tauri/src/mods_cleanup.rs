@@ -602,9 +602,15 @@ async fn resolve_curseforge_jar(project_id: u32, file_id: Option<u32>) -> Result
 
 async fn resolve_modrinth_jar(project: &str, version: Option<&str>) -> Result<String, AppError> {
     let mc = &modpack_profile::get().minecraft;
-    let request = ModRequest::Modrinth {
-        id_or_slug: project.to_string(),
-        version: version.map(|s| s.to_string()),
+    let via_connector = optional_mods()
+        .iter()
+        .find(|m| m.project.as_deref() == Some(project))
+        .map(|m| m.via_connector)
+        .unwrap_or(false);
+    let request = if via_connector {
+        ModRequest::modrinth_via_connector(project.to_string(), version.map(|s| s.to_string()))
+    } else {
+        ModRequest::modrinth(project.to_string(), version.map(|s| s.to_string()))
     };
     let (resolved, _deps) = modrinth::fetch(
         &request,

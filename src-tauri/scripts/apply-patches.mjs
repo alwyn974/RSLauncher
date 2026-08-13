@@ -124,5 +124,6 @@ async function applyOne(crate) {
 
 mkdirSync(OUT, { recursive: true });
 await applyOne("lighty-modsloader");
+await applyOne("lighty-version");
 await applyOne("lighty-launch");
 await applyOne("lighty-java");

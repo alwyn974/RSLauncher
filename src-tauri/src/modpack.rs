@@ -78,6 +78,11 @@ pub fn build_instance_for_with(pack_id: &str, settings: &Settings) -> VersionBui
         if !mr.is_empty() {
             mods = mods.with_modrinth_mods(mr);
         }
+
+        let mr_connector = catalog::enabled_modrinth_connector_optionals(settings);
+        if !mr_connector.is_empty() {
+            mods = mods.with_modrinth_connector_mods(mr_connector);
+        }
     } else {
         let cf: Vec<(u32, Option<u32>)> = profile
             .required_curseforge

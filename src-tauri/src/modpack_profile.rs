@@ -73,6 +73,10 @@ pub struct OptionalModSpec {
     pub description: String,
     #[serde(default)]
     pub default_enabled: bool,
+    /// Fabric mod that runs on Forge/NeoForge through Sinytra Connector.
+    /// Resolved against the Fabric loader; Fabric API deps are skipped.
+    #[serde(default)]
+    pub via_connector: bool,
     pub provider: ModProvider,
     pub project_id: Option<u32>,
     pub file_id: Option<u32>,
