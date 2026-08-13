@@ -69,13 +69,18 @@ file_id = 8227753
 # Create: Radars
 
 [[required_curseforge]]
+project_id = 1023209
+file_id = 8327947
+# Create: Fuel & Water Information
+
+[[required_curseforge]]
 project_id = 1394406
 file_id = 7450829
 # Fungi Delight (Farmers Delight Addon)
 
 [[required_curseforge]]
 project_id = 422301
-file_id = 8610998
+file_id = 8627841
 # Sophisticated Backpacks
 
 [[required_curseforge]]
@@ -197,11 +202,6 @@ file_id = 6731925
 project_id = 231484
 file_id = 8404453
 # Cooking for Blockheads
-
-[[required_curseforge]]
-project_id = 1217628
-file_id = 6289346
-# Create: Better Create
 
 [[required_curseforge]]
 project_id = 448233
@@ -469,6 +469,11 @@ file_id = 8485313
 # Veggies Delight (A Farmer's Delight Add-on)
 
 [[required_curseforge]]
+project_id = 466792
+file_id = 8294772
+# Create Stuff 'N Additions
+
+[[required_curseforge]]
 project_id = 274259
 file_id = 8512888
 # Carry On
@@ -485,7 +490,7 @@ file_id = 8002670
 
 [[required_curseforge]]
 project_id = 1249131
-file_id = 8225206
+file_id = 8625815
 # Create: Integrated Farming
 
 [[required_curseforge]]
@@ -535,7 +540,7 @@ file_id = 8475257
 
 [[required_curseforge]]
 project_id = 663141
-file_id = 6951202
+file_id = 8614449
 # Paladin's Furniture
 
 [[required_curseforge]]
@@ -609,6 +614,11 @@ file_id = 8595597
 # MrCrayFish's Furniture Mod (Legacy Continued) + Nosiphus Furniture Mod
 
 [[required_curseforge]]
+project_id = 1374815
+file_id = 7568020
+# Create: Stuff 'N Additions - Tank Fix (Spout, Curios & Upgrade)
+
+[[required_curseforge]]
 project_id = 340583
 file_id = 6939522
 # YUNG's Better Caves (Forge/NeoForge)
@@ -624,14 +634,14 @@ file_id = 6678349
 # Create : New Furnitures
 
 [[required_curseforge]]
-project_id = 1015112
-file_id = 5954804
-# YUNG's Better Dungeons (NeoForge) [1.20.4 - 1.21.1 ONLY]
-
-[[required_curseforge]]
 project_id = 276951
 file_id = 7515858
 # Comforts
+
+[[required_curseforge]]
+project_id = 1015112
+file_id = 5954804
+# YUNG's Better Dungeons (NeoForge) [1.20.4 - 1.21.1 ONLY]
 
 [[required_curseforge]]
 project_id = 652202
@@ -660,13 +670,8 @@ file_id = 5623731
 
 [[required_curseforge]]
 project_id = 326652
-file_id = 8481114
+file_id = 8623569
 # Cupboard
-
-[[required_curseforge]]
-project_id = 361579
-file_id = 6225208
-# spark
 
 [[required_curseforge]]
 project_id = 441647
@@ -674,9 +679,9 @@ file_id = 8349218
 # FramedBlocks
 
 [[required_curseforge]]
-project_id = 243707
-file_id = 8606951
-# Corail Tombstone
+project_id = 361579
+file_id = 6225208
+# spark
 
 [[required_curseforge]]
 project_id = 1015146
@@ -684,14 +689,19 @@ file_id = 5812546
 # YUNG's Extras (NeoForge) [1.20.4 - 1.21.1 ONLY]
 
 [[required_curseforge]]
-project_id = 1090999
-file_id = 8359493
-# AddonsLib
+project_id = 243707
+file_id = 8606951
+# Corail Tombstone
 
 [[required_curseforge]]
 project_id = 1279407
 file_id = 7587771
 # Ritchie's Projectile Library
+
+[[required_curseforge]]
+project_id = 1090999
+file_id = 8359493
+# AddonsLib
 
 [[required_curseforge]]
 project_id = 704465
@@ -704,14 +714,19 @@ file_id = 7120722
 # Smarter Farmers (farmers replant)
 
 [[required_curseforge]]
-project_id = 1529625
-file_id = 8020847
-# Shtreimel - Sable Utility
+project_id = 1541139
+file_id = 8158810
+# Create Stuff 'N Additions x Sable & Aeronautics Compat
 
 [[required_curseforge]]
 project_id = 699872
 file_id = 5433036
 # Accelerated Decay
+
+[[required_curseforge]]
+project_id = 1529625
+file_id = 8020847
+# Shtreimel - Sable Utility
 
 [[required_curseforge]]
 project_id = 688768
@@ -729,24 +744,24 @@ file_id = 5729127
 # Cloth Config API (Fabric/Forge/NeoForge)
 
 [[required_curseforge]]
-project_id = 602059
-file_id = 8589256
-# Friends&Foes (Forge/NeoForge)
-
-[[required_curseforge]]
 project_id = 342584
 file_id = 8341460
 # Collective
 
 [[required_curseforge]]
-project_id = 378646
-file_id = 7618651
-# Macaw's Doors
+project_id = 602059
+file_id = 8589256
+# Friends&Foes (Forge/NeoForge)
 
 [[required_curseforge]]
 project_id = 359540
 file_id = 7255584
 # Macaw's Furniture
+
+[[required_curseforge]]
+project_id = 378646
+file_id = 7618651
+# Macaw's Doors
 
 [[required_curseforge]]
 project_id = 1572229
@@ -759,14 +774,14 @@ file_id = 8613587
 # Create: Auction House
 
 [[required_curseforge]]
-project_id = 454372
-file_id = 8616830
-# SuperMartijn642's Core Lib
-
-[[required_curseforge]]
 project_id = 1024152
 file_id = 8440350
 # Load My Chunks
+
+[[required_curseforge]]
+project_id = 454372
+file_id = 8623666
+# SuperMartijn642's Core Lib
 
 [[required_curseforge]]
 project_id = 250419
@@ -784,6 +799,16 @@ file_id = 8299240
 # Create: Connected
 
 [[required_curseforge]]
+project_id = 1026647
+file_id = 7127315
+# Create Stuff & Netherite Additions
+
+[[required_curseforge]]
+project_id = 495476
+file_id = 8251525
+# Puzzles Lib
+
+[[required_curseforge]]
 project_id = 400933
 file_id = 7256148
 # Macaw's Trapdoors
@@ -794,14 +819,14 @@ file_id = 8549361
 # Aeronautics Camera Sync
 
 [[required_curseforge]]
-project_id = 1226755
-file_id = 8503147
-# Sophisticated Storage Create Integration
-
-[[required_curseforge]]
 project_id = 627986
 file_id = 8528824
 # Naturalist
+
+[[required_curseforge]]
+project_id = 1226755
+file_id = 8503147
+# Sophisticated Storage Create Integration
 
 [[required_curseforge]]
 project_id = 961988
@@ -819,24 +844,24 @@ file_id = 8520252
 # FTB Chunks (NeoForge)
 
 [[required_curseforge]]
-project_id = 1038103
-file_id = 8543130
-# [Let's Do] Farm & Charm
-
-[[required_curseforge]]
 project_id = 976858
 file_id = 6407807
 # Inventory Tweaks - ReFoxed
 
 [[required_curseforge]]
-project_id = 1015114
-file_id = 6276955
-# YUNG's Better Desert Temples (NeoForge) [1.20.4 - 1.21.1 ONLY]
+project_id = 1038103
+file_id = 8543130
+# [Let's Do] Farm & Charm
 
 [[required_curseforge]]
 project_id = 1015144
 file_id = 5812532
 # YUNG's Better Witch Huts (NeoForge) [1.20.4 - 1.21.1 ONLY]
+
+[[required_curseforge]]
+project_id = 1015114
+file_id = 6276955
+# YUNG's Better Desert Temples (NeoForge) [1.20.4 - 1.21.1 ONLY]
 
 [[required_curseforge]]
 project_id = 241160
@@ -849,14 +874,14 @@ file_id = 6272264
 # YUNG's Better Strongholds (NeoForge) [1.20.4 - 1.21.1 ONLY]
 
 [[required_curseforge]]
-project_id = 1061749
-file_id = 7766920
-# Create: Enchantable Machinery
-
-[[required_curseforge]]
 project_id = 1533137
 file_id = 8268622
 # Create Deep Seas
+
+[[required_curseforge]]
+project_id = 1061749
+file_id = 7766920
+# Create: Enchantable Machinery
 
 [[required_curseforge]]
 project_id = 693815
@@ -874,24 +899,29 @@ file_id = 8439673
 # Structure Compass
 
 [[required_curseforge]]
+project_id = 1381155
+file_id = 7977843
+# Create: EasyFilling
+
+[[required_curseforge]]
 project_id = 394468
 file_id = 8591792
 # Sodium
 
 [[required_curseforge]]
 project_id = 412082
-file_id = 8582162
+file_id = 8625002
 # Supplementaries
-
-[[required_curseforge]]
-project_id = 1550279
-file_id = 8189769
-# Create Aeronautics Structures
 
 [[required_curseforge]]
 project_id = 899386
 file_id = 8539619
 # Just Enough Breeding (JEBr)
+
+[[required_curseforge]]
+project_id = 1550279
+file_id = 8189769
+# Create Aeronautics Structures
 
 [[required_curseforge]]
 project_id = 252848
@@ -924,14 +954,14 @@ file_id = 7628197
 # [Let's Do] Bakery - Farm&Charm Compat
 
 [[required_curseforge]]
-project_id = 238222
-file_id = 8617350
-# Just Enough Items (JEI)
-
-[[required_curseforge]]
 project_id = 858691
 file_id = 7672876
 # [Let's Do] Beachparty
+
+[[required_curseforge]]
+project_id = 238222
+file_id = 8622758
+# Just Enough Items (JEI)
 
 [[required_curseforge]]
 project_id = 1233526
@@ -959,14 +989,24 @@ file_id = 6665088
 # Simple Decorations: Soft and Squishy
 
 [[required_curseforge]]
+project_id = 352039
+file_id = 6494399
+# Macaw's Roofs
+
+[[required_curseforge]]
 project_id = 1562702
 file_id = 8186381
 # Create Aeronautics New Structures
 
 [[required_curseforge]]
-project_id = 352039
-file_id = 6494399
-# Macaw's Roofs
+project_id = 1543158
+file_id = 8499731
+# Create: Unbreakable series
+
+[[required_curseforge]]
+project_id = 1150683
+file_id = 8553533
+# Better Library
 
 [[required_curseforge]]
 project_id = 1529882
@@ -1000,7 +1040,7 @@ file_id = 8574865
 
 [[required_curseforge]]
 project_id = 1216624
-file_id = 8567534
+file_id = 8633162
 # Create: Dragons Plus
 
 [[required_curseforge]]
@@ -1030,7 +1070,7 @@ file_id = 6529130
 
 [[required_curseforge]]
 project_id = 626676
-file_id = 8616805
+file_id = 8623935
 # LDLib
 
 [[required_curseforge]]
@@ -1064,14 +1104,14 @@ file_id = 8309722
 # Tool Belt
 
 [[required_curseforge]]
-project_id = 1573069
-file_id = 8236708
-# Create: Numismatics - Team Accounts
-
-[[required_curseforge]]
 project_id = 1320115
 file_id = 6844021
 # Create: Sophisticated Backpacks Compat
+
+[[required_curseforge]]
+project_id = 1123746
+file_id = 8172510
+# Underground Villages, Stoneholm (Fabric/Forge/NeoForge)
 
 [[required_curseforge]]
 project_id = 363569
@@ -1154,14 +1194,14 @@ file_id = 7966196
 # Farming for Blockheads
 
 [[required_curseforge]]
-project_id = 869316
-file_id = 8542167
-# Create: Diesel Generators
-
-[[required_curseforge]]
 project_id = 646668
 file_id = 8303106
 # Create Big Cannons
+
+[[required_curseforge]]
+project_id = 869316
+file_id = 8542167
+# Create: Diesel Generators
 
 [[required_curseforge]]
 project_id = 888624
@@ -1174,9 +1214,9 @@ file_id = 8209287
 # Farmer's Sandwiches (A Farmer's Delight Add-on)
 
 [[required_curseforge]]
-project_id = 658587
-file_id = 7389814
-# playerAnimator
+project_id = 1514529
+file_id = 8493955
+# Create Aeronautics: Claims (FTB/OPAC)
 
 [[required_curseforge]]
 project_id = 628972
@@ -1184,9 +1224,9 @@ file_id = 7933578
 # Farmer's Knives
 
 [[required_curseforge]]
-project_id = 1514529
-file_id = 8493955
-# Create Aeronautics: Claims (FTB/OPAC)
+project_id = 658587
+file_id = 7389814
+# playerAnimator
 
 [[required_curseforge]]
 project_id = 990406
@@ -1195,12 +1235,12 @@ file_id = 6105672
 
 [[required_curseforge]]
 project_id = 1524471
-file_id = 8546208
+file_id = 8632751
 # Waystones: Sable (Create Aeronautics Addon)
 
 [[required_curseforge]]
 project_id = 1549100
-file_id = 8565032
+file_id = 8621990
 # Create: AeroPortals
 
 [[required_curseforge]]
@@ -1239,14 +1279,14 @@ file_id = 7830639
 # [Let's Do] Brewery - Farm&Charm Compat
 
 [[required_curseforge]]
-project_id = 1238567
-file_id = 8398818
-# Sophisticated Backpacks Create Integration
-
-[[required_curseforge]]
 project_id = 1166930
 file_id = 8434254
 # Sophisticated Storage in Motion
+
+[[required_curseforge]]
+project_id = 1238567
+file_id = 8398818
+# Sophisticated Backpacks Create Integration
 
 [[required_curseforge]]
 project_id = 622888
@@ -1255,7 +1295,7 @@ file_id = 7436813
 
 [[required_curseforge]]
 project_id = 618298
-file_id = 8610910
+file_id = 8627791
 # Sophisticated Core
 
 [[required_curseforge]]
@@ -1264,13 +1304,18 @@ file_id = 7055133
 # Bad Mobs
 
 [[required_curseforge]]
+project_id = 905508
+file_id = 8265828
+# Create: Quality Of Life
+
+[[required_curseforge]]
 project_id = 1409401
 file_id = 8520510
 # Create:LazyTick
 
 [[required_curseforge]]
 project_id = 619320
-file_id = 8609588
+file_id = 8635485
 # Sophisticated Storage
 
 [[required_curseforge]]
@@ -1284,6 +1329,11 @@ file_id = 6053984
 # Farmer's Delight Wearable Cooking Pot
 
 [[required_curseforge]]
+project_id = 551151
+file_id = 7844709
+# Enchanting Infuser
+
+[[required_curseforge]]
 project_id = 1094819
 file_id = 6274107
 # Farmer's Cutting: Oh The Biomes We've Gone
@@ -1294,14 +1344,14 @@ file_id = 6383261
 # Chunky (Forge/NeoForge)
 
 [[required_curseforge]]
-project_id = 1222164
-file_id = 8614344
-# CBC Military Supplement
-
-[[required_curseforge]]
 project_id = 502372
 file_id = 7304075
 # Macaw's Lights and Lamps
+
+[[required_curseforge]]
+project_id = 1222164
+file_id = 8614344
+# CBC Military Supplement
 
 [[required_curseforge]]
 project_id = 1489732
@@ -1329,14 +1379,14 @@ file_id = 8177588
 # Euphoria Patches
 
 [[required_curseforge]]
-project_id = 853794
-file_id = 5768823
-# Dungeons and Taverns
-
-[[required_curseforge]]
 project_id = 737302
 file_id = 7232820
 # Create: Ender Transmission
+
+[[required_curseforge]]
+project_id = 853794
+file_id = 5768823
+# Dungeons and Taverns
 
 [[required_curseforge]]
 project_id = 385587
@@ -1347,6 +1397,11 @@ file_id = 8123288
 project_id = 561885
 file_id = 6290230
 # Just Zoom
+
+[[required_curseforge]]
+project_id = 237307
+file_id = 5610814
+# Cosmetic Armor Reworked
 
 [[required_curseforge]]
 project_id = 1398383
@@ -1374,24 +1429,24 @@ file_id = 8138502
 # Create: Structures Arise
 
 [[required_curseforge]]
-project_id = 509575
-file_id = 6697124
-# Observable
-
-[[required_curseforge]]
 project_id = 277616
 file_id = 7374098
 # Spice of Life: Carrot Edition
 
 [[required_curseforge]]
-project_id = 1088877
-file_id = 8130121
-# Farmers Structures
+project_id = 509575
+file_id = 6697124
+# Observable
 
 [[required_curseforge]]
 project_id = 1339392
 file_id = 8265783
 # Create: Numismatics Utils
+
+[[required_curseforge]]
+project_id = 1088877
+file_id = 8130121
+# Farmers Structures
 
 [[required_curseforge]]
 project_id = 1254143
@@ -1414,19 +1469,14 @@ file_id = 8083481
 # Farmer's Delight
 
 [[required_curseforge]]
-project_id = 331936
-file_id = 8458935
-# Citadel
-
-[[required_curseforge]]
 project_id = 1511109
 file_id = 8443084
 # Just Enough Recipe Sharing (JERS)
 
 [[required_curseforge]]
-project_id = 1548138
-file_id = 8274315
-# CBC: Firepower Components
+project_id = 331936
+file_id = 8458935
+# Citadel
 
 [[required_curseforge]]
 project_id = 1196006
@@ -1434,14 +1484,19 @@ file_id = 6232444
 # Sparkle: Reforge
 
 [[required_curseforge]]
-project_id = 1477581
-file_id = 8004324
-# Create: Tradeworks
+project_id = 1548138
+file_id = 8274315
+# CBC: Firepower Components
 
 [[required_curseforge]]
 project_id = 453925
 file_id = 7308338
 # Macaw's Fences and Walls
+
+[[required_curseforge]]
+project_id = 1477581
+file_id = 8004324
+# Create: Tradeworks
 
 [[required_curseforge]]
 project_id = 1110773
@@ -1462,6 +1517,11 @@ file_id = 8265245
 project_id = 1559550
 file_id = 8427886
 # Create Aeronautics: Shield Generators | Create Big Cannons Compat |Force Field
+
+[[required_curseforge]]
+project_id = 1578228
+file_id = 8307052
+# Create Aero Radars
 
 # --- END CURSEFORGE MANIFEST ---
 
