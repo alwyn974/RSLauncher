@@ -42,13 +42,7 @@ async fn resolve_profile() -> Result<UserProfile, AppError> {
     let uuid = accounts::active_uuid()?
         .ok_or_else(|| AppError::msg("No active account - sign in first"))?;
 
-    let client_id = config::azure_client_id().ok_or_else(|| {
-        AppError::msg(
-            "This build has no Azure client ID. Rebuild with AZURE_CLIENT_ID set \
-             (or src-tauri/azure_client_id).",
-        )
-    })?;
-    let mut auth = MicrosoftAuth::new(client_id).with_keyring(config::LAUNCHER_NAME);
+    let mut auth = MicrosoftAuth::new(config::AZURE_CLIENT_ID).with_keyring(config::LAUNCHER_NAME);
 
     if let Some(rt) = accounts::load_refresh_token(&uuid) {
         match auth.authenticate_with_refresh_token(&rt, None).await {

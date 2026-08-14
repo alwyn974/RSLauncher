@@ -13,12 +13,6 @@ fn main() {
         "curseforge_api_key",
         "RSLAUNCHER_CF_API_KEY",
     );
-    bake_secret(
-        "AZURE_CLIENT_ID",
-        "azure_client_id",
-        "RSLAUNCHER_AZURE_CLIENT_ID",
-    );
-
     tauri_build::build();
 }
 

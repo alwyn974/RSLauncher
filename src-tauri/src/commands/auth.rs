@@ -9,22 +9,12 @@ use crate::dto::{AccountDto, DeviceCodePayload, Progress};
 use crate::error::AppError;
 use crate::state::LaunchState;
 
-fn require_azure_client_id() -> Result<&'static str, AppError> {
-    config::azure_client_id().ok_or_else(|| {
-        AppError::msg(
-            "This build has no Azure client ID. Rebuild with AZURE_CLIENT_ID set \
-             (or src-tauri/azure_client_id).",
-        )
-    })
-}
-
 #[tauri::command]
 pub async fn login_with_microsoft(
     app: AppHandle,
     state: State<'_, Arc<LaunchState>>,
 ) -> Result<AccountDto, AppError> {
-    let client_id = require_azure_client_id()?;
-    let mut auth = MicrosoftAuth::new(client_id).with_keyring(config::LAUNCHER_NAME);
+    let mut auth = MicrosoftAuth::new(config::AZURE_CLIENT_ID).with_keyring(config::LAUNCHER_NAME);
 
     let app_cb = app.clone();
     auth.set_device_code_callback(move |code, url| {
