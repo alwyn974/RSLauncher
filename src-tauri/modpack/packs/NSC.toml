@@ -1298,6 +1298,15 @@ required = ["worldedit"]
 # --- OPTIONAL MODS ---
 
 [[optional]]
+id = "observable"
+name = "Observable"
+description = "See what's lagging your server."
+default_enabled = false
+provider = "curseforge"
+project_id = 509575
+file_id = 6697124
+
+[[optional]]
 id = "borderless-window"
 name = "Borderless Window"
 description = "Borderless fullscreen with a 3-mode system and configurable F11, plus a growing set of video and quality-of-life options Minecraft doesn't expose. Every setting defaults to vanilla. Client-side, no dependencies, optional Sodium integration."
