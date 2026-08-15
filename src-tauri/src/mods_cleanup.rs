@@ -30,9 +30,57 @@ use crate::error::AppError;
 use crate::modpack_profile::{self, PackProvider};
 use crate::optional_content;
 
+const IGNORELIST_FILE: &str = "mods-ignorelist.txt";
+
 #[derive(Debug, Deserialize)]
 struct CachedMod {
     path: Option<String>,
+}
+
+#[derive(Debug, Default)]
+struct IgnoreList {
+    patterns: Vec<String>,
+}
+
+impl IgnoreList {
+    fn load(game_dir: &Path) -> Self {
+        let paths = [
+            AppState::data_dir().join(IGNORELIST_FILE),
+            game_dir.join(IGNORELIST_FILE),
+        ];
+        let mut patterns = Vec::new();
+
+        for path in paths {
+            match fs::read_to_string(&path) {
+                Ok(contents) => {
+                    let before = patterns.len();
+                    patterns.extend(parse_ignorelist(&contents));
+                    log::info!(
+                        target: "rslauncher",
+                        "[mods] loaded {} ignore pattern(s) from {}",
+                        patterns.len() - before,
+                        path.display()
+                    );
+                }
+                Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+                Err(err) => log::warn!(
+                    target: "rslauncher",
+                    "[mods] could not read ignorelist {}: {err}",
+                    path.display()
+                ),
+            }
+        }
+
+        Self { patterns }
+    }
+
+    fn contains(&self, file_name: &str) -> bool {
+        let name = file_name.to_ascii_lowercase();
+        let enabled_name = name.strip_suffix(".disabled").unwrap_or(&name);
+        self.patterns.iter().any(|pattern| {
+            wildcard_matches(pattern, &name) || wildcard_matches(pattern, enabled_name)
+        })
+    }
 }
 
 /// Apply pack overrides, dedupe modIds, then remove orphan jars.
@@ -149,6 +197,7 @@ pub async fn remove_orphans(game_dir: &Path, _settings: &Settings) -> Result<(),
         return Ok(());
     }
 
+    let ignorelist = IgnoreList::load(game_dir);
     let mut removed = 0u32;
     for entry in fs::read_dir(&mods_dir)? {
         let entry = entry?;
@@ -163,6 +212,10 @@ pub async fn remove_orphans(game_dir: &Path, _settings: &Settings) -> Result<(),
             continue;
         }
         if keep.contains(name) {
+            continue;
+        }
+        if ignorelist.contains(name) {
+            log::debug!(target: "rslauncher", "[mods] ignored orphan {name}");
             continue;
         }
         match fs::remove_file(entry.path()) {
@@ -201,6 +254,56 @@ pub async fn remove_orphans(game_dir: &Path, _settings: &Settings) -> Result<(),
 fn is_managed_jar_name(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     lower.ends_with(".jar") || lower.ends_with(".jar.disabled")
+}
+
+fn parse_ignorelist(contents: &str) -> impl Iterator<Item = String> + '_ {
+    contents.lines().filter_map(|line| {
+        let pattern = line.trim().trim_start_matches('\u{feff}');
+        if pattern.is_empty() || pattern.starts_with('#') {
+            return None;
+        }
+
+        let normalized = pattern.replace('\\', "/").to_ascii_lowercase();
+        let normalized = normalized.strip_prefix("mods/").unwrap_or(&normalized);
+        if normalized.contains('/') {
+            log::warn!(
+                target: "rslauncher",
+                "[mods] ignoring invalid nested ignore pattern {pattern:?}"
+            );
+            return None;
+        }
+        Some(normalized.to_string())
+    })
+}
+
+/// Match `*` (zero or more characters) and `?` (one character).
+fn wildcard_matches(pattern: &str, text: &str) -> bool {
+    let pattern = pattern.as_bytes();
+    let text = text.as_bytes();
+    let (mut p, mut t) = (0, 0);
+    let (mut star, mut retry_t) = (None, 0);
+
+    while t < text.len() {
+        if p < pattern.len() && (pattern[p] == b'?' || pattern[p] == text[t]) {
+            p += 1;
+            t += 1;
+        } else if p < pattern.len() && pattern[p] == b'*' {
+            star = Some(p);
+            p += 1;
+            retry_t = t;
+        } else if let Some(star_p) = star {
+            p = star_p + 1;
+            retry_t += 1;
+            t = retry_t;
+        } else {
+            return false;
+        }
+    }
+
+    while p < pattern.len() && pattern[p] == b'*' {
+        p += 1;
+    }
+    p == pattern.len()
 }
 
 fn mods_json_path(archive: &Path) -> PathBuf {
@@ -629,4 +732,37 @@ async fn resolve_modrinth_jar(project: &str, version: Option<&str>) -> Result<St
         .and_then(|s| s.to_str())
         .map(|s| s.to_string())
         .ok_or_else(|| AppError::msg(format!("Modrinth {project}: invalid file path {path}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_ignorelist, wildcard_matches, IgnoreList};
+
+    #[test]
+    fn parses_comments_paths_and_normalizes_case() {
+        let patterns: Vec<_> = parse_ignorelist(
+            "\u{feff}# Personal mods\nmods/Essential-*.jar\n\nMODS\\voicechat.jar\nsubdir/nope.jar\n",
+        )
+        .collect();
+
+        assert_eq!(patterns, ["essential-*.jar", "voicechat.jar"]);
+    }
+
+    #[test]
+    fn wildcards_match_expected_file_names() {
+        assert!(wildcard_matches("essential-*.jar", "essential-1.3.5.jar"));
+        assert!(wildcard_matches("mod-?.jar", "mod-a.jar"));
+        assert!(!wildcard_matches("mod-?.jar", "mod-ab.jar"));
+    }
+
+    #[test]
+    fn ignorelist_matches_case_insensitively_and_protects_disabled_jar() {
+        let ignorelist = IgnoreList {
+            patterns: vec!["essential-*.jar".into(), "voicechat.jar".into()],
+        };
+
+        assert!(ignorelist.contains("Essential-1.3.5.JAR"));
+        assert!(ignorelist.contains("voicechat.jar.disabled"));
+        assert!(!ignorelist.contains("managed.jar"));
+    }
 }
