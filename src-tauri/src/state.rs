@@ -34,7 +34,17 @@ impl LaunchState {
         self.busy.store(busy, Ordering::SeqCst);
     }
 
+    pub fn try_set_busy(&self) -> bool {
+        self.busy
+            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+            .is_ok()
+    }
+
     pub fn is_busy(&self) -> bool {
         self.busy.load(Ordering::SeqCst)
+    }
+
+    pub fn is_running(&self) -> bool {
+        self.pid.lock().expect("pid mutex poisoned").is_some()
     }
 }

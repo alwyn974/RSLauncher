@@ -103,6 +103,7 @@ pub fn build_instance_for_with(pack_id: &str, settings: &Settings) -> VersionBui
     }
 
     mods.done()
+        .with_custom_java_dir(crate::storage::java_dir().to_path_buf())
 }
 
 /// True when the active pack looks actually installed (not just an empty/partial dir).

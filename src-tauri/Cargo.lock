@@ -6,6 +6,7 @@ version = 4
 name = "RSLauncher"
 version = "0.3.2"
 dependencies = [
+ "dirs",
  "fastnbt",
  "flate2",
  "include_dir",
@@ -2534,8 +2535,6 @@ dependencies = [
 [[package]]
 name = "lighty-core"
 version = "26.5.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e4f73b0635a094828a5751ea546c092766ca4411f37a522a8d05b1e133a81b7"
 dependencies = [
  "async-compression",
  "async_zip",

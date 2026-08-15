@@ -2,12 +2,15 @@
 /**
  * Settings: RAM, resolution, server, optional mods, shader presets, JVM args.
  */
-import { computed, reactive } from "vue";
+import { computed, reactive, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+import { relaunch } from "@tauri-apps/plugin-process";
 import {
   launcher,
   type OptionalBundleInfo,
   type Settings,
+  type StorageLocationCheck,
 } from "../stores/launcher";
 import PixelButton from "../components/PixelButton.vue";
 import PixelIcon from "../components/PixelIcon.vue";
@@ -158,12 +161,70 @@ async function openLauncherFolder() {
     console.error(e);
   }
 }
+
+const storageCheck = ref<StorageLocationCheck | null>(null);
+const storageSelectedPath = ref("");
+const storageError = ref("");
+const choosingStorage = ref(false);
+const movingStorage = computed(() => {
+  const stage = launcher.state.storageMigration?.stage;
+  return stage === "copying" || stage === "verifying";
+});
+const storageLocked = computed(
+  () =>
+    launcher.busy.value ||
+    launcher.state.progress.stage === "running" ||
+    movingStorage.value ||
+    launcher.state.storageRestartRequired,
+);
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1024;
+  let unit = units[0];
+  for (let i = 1; i < units.length && value >= 1024; i += 1) {
+    value /= 1024;
+    unit = units[i];
+  }
+  return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
+}
+
+async function chooseStorageFolder() {
+  storageError.value = "";
+  choosingStorage.value = true;
+  try {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Choose where RSLauncher stores game files",
+    });
+    if (!selected || Array.isArray(selected)) return;
+    storageSelectedPath.value = selected;
+    storageCheck.value = await launcher.inspectStorageLocation(selected);
+  } catch (e) {
+    storageError.value = String(e);
+  } finally {
+    choosingStorage.value = false;
+  }
+}
+
+async function moveStorage() {
+  if (!storageSelectedPath.value) return;
+  storageError.value = "";
+  try {
+    await launcher.migrateStorage(storageSelectedPath.value);
+    storageCheck.value = null;
+  } catch (e) {
+    storageError.value = String(e);
+  }
+}
 </script>
 
 <template>
   <div class="flex h-full flex-col p-3">
     <header class="flex items-center gap-3">
-      <PixelButton class="px-2 py-1.5" aria-label="Back" @click="launcher.setView('play')">
+      <PixelButton class="px-2 py-1.5" aria-label="Back" :disabled="storageLocked" @click="launcher.setView('play')">
         <PixelIcon name="back" :size="16" />
       </PixelButton>
       <div>
@@ -179,12 +240,67 @@ async function openLauncherFolder() {
       <section class="mc-panel p-4">
         <h2 class="font-pixel pixel-shadow-sm text-xs text-mc-gold">Folders</h2>
         <p class="mt-2 text-xs text-mc-muted">
-          Open game files in your file manager.
+          Instances, downloads, and Java use the storage location below. Accounts and settings
+          stay in the small system configuration folder.
         </p>
+        <div v-if="launcher.state.storage" class="mc-inset-well mt-3 p-3">
+          <p class="text-xs text-mc-muted">
+            {{ launcher.state.storage.custom ? "Custom storage" : "System default" }}
+          </p>
+          <p class="mt-1 break-all font-mono text-xs text-mc-text">
+            {{ launcher.state.storage.root }}
+          </p>
+          <p class="mt-2 text-xs text-mc-muted">
+            {{ formatBytes(launcher.state.storage.installedBytes) }} used ·
+            {{ formatBytes(launcher.state.storage.freeBytes) }} free
+          </p>
+        </div>
         <div class="mt-3 flex flex-wrap gap-2">
           <PixelButton @click="openInstanceFolder">Instance folder</PixelButton>
           <PixelButton @click="openLauncherFolder">RSLauncher folder</PixelButton>
+          <PixelButton :disabled="storageLocked || choosingStorage" @click="chooseStorageFolder">
+            {{ choosingStorage ? "Choosing…" : "Change storage" }}
+          </PixelButton>
         </div>
+
+        <div v-if="storageCheck" class="mt-3 border-2 border-mc-gold bg-mc-panel-2 p-3">
+          <p class="font-pixel text-xs text-mc-gold">Move launcher files?</p>
+          <p class="mt-2 break-all font-mono text-xs text-mc-text">{{ storageCheck.root }}</p>
+          <p class="mt-2 text-xs text-mc-muted">
+            {{ formatBytes(storageCheck.bytesToMove) }} to copy ·
+            {{ formatBytes(storageCheck.freeBytes) }} free
+          </p>
+          <p class="mt-1 text-xs text-mc-muted">
+            Files are copied and verified before the originals are removed. A restart is required.
+          </p>
+          <div class="mt-3 flex gap-2">
+            <PixelButton variant="gold" @click="moveStorage">Move files</PixelButton>
+            <PixelButton @click="storageCheck = null">Cancel</PixelButton>
+          </div>
+        </div>
+
+        <div v-if="movingStorage && launcher.state.storageMigration" class="mt-3">
+          <div class="flex justify-between text-xs text-mc-muted">
+            <span>{{ launcher.state.storageMigration.stage === "verifying" ? "Verifying files…" : "Moving files…" }}</span>
+            <span>{{ launcher.state.storageMigration.percent }}%</span>
+          </div>
+          <div class="mc-inset-well mt-1 h-3 p-0.5">
+            <div
+              class="h-full bg-mc-green"
+              :style="{ width: `${launcher.state.storageMigration.percent}%` }"
+            />
+          </div>
+          <p class="mt-1 truncate font-mono text-[10px] text-mc-faint">
+            {{ launcher.state.storageMigration.detail }}
+          </p>
+        </div>
+
+        <div v-if="launcher.state.storageRestartRequired" class="mt-3 border-2 border-mc-green bg-mc-panel-2 p-3">
+          <p class="text-xs text-mc-text">Storage moved successfully. Restart to use the new location.</p>
+          <PixelButton class="mt-3" variant="green" @click="relaunch">Restart launcher</PixelButton>
+        </div>
+
+        <p v-if="storageError" class="mt-3 text-xs text-mc-red">{{ storageError }}</p>
       </section>
 
       <!-- Memory -->
@@ -446,8 +562,8 @@ async function openLauncherFolder() {
     </main>
 
     <footer class="mx-auto flex w-full max-w-lg justify-end gap-2 pt-2">
-      <PixelButton @click="reset">Reset</PixelButton>
-      <PixelButton variant="gold" @click="save">Save</PixelButton>
+      <PixelButton :disabled="storageLocked" @click="reset">Reset</PixelButton>
+      <PixelButton variant="gold" :disabled="storageLocked" @click="save">Save</PixelButton>
     </footer>
   </div>
 </template>

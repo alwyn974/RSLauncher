@@ -1,0 +1,43 @@
+diff --git a/src/app_state.rs b/src/app_state.rs
+index 2fe00d9..9002ead 100644
+--- a/src/app_state.rs
++++ b/src/app_state.rs
+@@ -31,16 +31,37 @@ impl AppState {
+     /// [`AppStateError::AlreadyInitialized`] on a second call.
+     pub fn init(name: impl Into<String>) -> AppStateResult<()> {
+         let name = name.into();
+         let data_dir = dirs::data_dir()
+             .ok_or(AppStateError::MissingPlatformDir("data"))?
+             .join(&name);
+         let config_dir = dirs::config_dir()
+             .ok_or(AppStateError::MissingPlatformDir("config"))?
+             .join(&name);
+         let cache_dir = dirs::cache_dir()
+             .ok_or(AppStateError::MissingPlatformDir("cache"))?
+             .join(&name);
++        Self::init_with_paths(name, data_dir, config_dir, cache_dir)
++    }
++
++    /// Initialises the global launcher paths with explicit directories.
++    ///
++    /// This is useful for launchers that let players keep large instances,
++    /// caches, or bundled runtimes on a drive other than the OS profile drive.
++    /// Paths are used exactly as supplied; the launcher is responsible for
++    /// choosing and creating application-specific subdirectories.
++    pub fn init_with_paths(
++        name: impl Into<String>,
++        data_dir: impl Into<PathBuf>,
++        config_dir: impl Into<PathBuf>,
++        cache_dir: impl Into<PathBuf>,
++    ) -> AppStateResult<()> {
++        let name = name.into();
+         PATHS
+-            .set(LauncherPaths { name, data_dir, config_dir, cache_dir })
++            .set(LauncherPaths {
++                name,
++                data_dir: data_dir.into(),
++                config_dir: config_dir.into(),
++                cache_dir: cache_dir.into(),
++            })
+             .map_err(|_| AppStateError::AlreadyInitialized)
+     }

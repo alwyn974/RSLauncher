@@ -115,6 +115,31 @@ export interface MemoryInfo {
   minGb: number;
 }
 
+export interface StorageInfo {
+  root: string;
+  dataDir: string;
+  cacheDir: string;
+  javaDir: string;
+  custom: boolean;
+  installedBytes: number;
+  freeBytes: number;
+}
+
+export interface StorageLocationCheck {
+  root: string;
+  bytesToMove: number;
+  freeBytes: number;
+  requiredBytes: number;
+}
+
+export interface StorageMigrationProgress {
+  stage: "copying" | "verifying" | "done";
+  detail: string;
+  bytesCopied: number;
+  bytesTotal: number;
+  percent: number;
+}
+
 export type LaunchStage =
   | "idle"
   | "preparing"
@@ -211,6 +236,9 @@ interface LauncherState {
   settings: Settings;
   catalog: Catalog;
   memory: MemoryInfo;
+  storage: StorageInfo | null;
+  storageMigration: StorageMigrationProgress | null;
+  storageRestartRequired: boolean;
   view: View;
   loginPending: boolean;
   loginError: string | null;
@@ -243,6 +271,9 @@ const state = reactive<LauncherState>({
   },
   catalog: { ...EMPTY_CATALOG },
   memory: { ...DEFAULT_MEMORY },
+  storage: null,
+  storageMigration: null,
+  storageRestartRequired: false,
   view: "play",
   loginPending: false,
   loginError: null,
@@ -312,6 +343,11 @@ const busy = computed(() =>
     state.progress.stage,
   ),
 );
+
+const storageBusy = computed(() => {
+  const stage = state.storageMigration?.stage;
+  return stage === "copying" || stage === "verifying" || state.storageRestartRequired;
+});
 
 /** Logs captured since the current (or last) sign-in attempt began. */
 let loginLogCursor = 0;
@@ -441,10 +477,13 @@ export async function initLauncher() {
           );
         }
       }),
+      await listen<StorageMigrationProgress>("storage://progress", (e) => {
+        state.storageMigration = e.payload;
+      }),
     );
 
     try {
-      const [accounts, settings, catalog, active, memory, status, modpacks, activePackId] =
+      const [accounts, settings, catalog, active, memory, status, modpacks, activePackId, storage] =
         await Promise.all([
           invoke<Account[]>("list_accounts"),
           invoke<Settings>("get_settings"),
@@ -454,11 +493,13 @@ export async function initLauncher() {
           invoke<{ installed: boolean; modCount: number }>("get_instance_status"),
           invoke<ModpackListEntry[]>("list_modpacks"),
           invoke<string>("get_active_modpack"),
+          invoke<StorageInfo>("get_storage_info"),
         ]);
       syncActive(accounts, active);
       state.modpacks = modpacks;
       state.activePackId = activePackId;
       state.memory = { ...DEFAULT_MEMORY, ...memory };
+      state.storage = storage;
       state.installed = status.installed;
       state.catalog = catalog;
       state.catalog.modpack.modCount = status.modCount;
@@ -536,7 +577,7 @@ async function setActiveAccount(id: string) {
 }
 
 async function setActiveModpack(id: string) {
-  if (busy.value || state.progress.stage === "running") {
+  if (busy.value || storageBusy.value || state.progress.stage === "running") {
     log("WARN", "launcher", "Cannot switch modpack while launching or running");
     return;
   }
@@ -614,8 +655,31 @@ async function refreshInstallStatus() {
   }
 }
 
+async function inspectStorageLocation(path: string): Promise<StorageLocationCheck> {
+  return invoke<StorageLocationCheck>("inspect_storage_location", { path });
+}
+
+async function migrateStorage(path: string): Promise<void> {
+  state.storageMigration = {
+    stage: "copying",
+    detail: "Preparing files…",
+    bytesCopied: 0,
+    bytesTotal: 0,
+    percent: 0,
+  };
+  try {
+    state.storage = await invoke<StorageInfo>("migrate_storage", { path });
+    state.storageRestartRequired = true;
+    log("INFO", "storage", `Storage moved to ${state.storage.root}`);
+  } catch (e) {
+    state.storageMigration = null;
+    log("ERROR", "storage", errorMessage(e));
+    throw e;
+  }
+}
+
 async function play(quickPlay = false) {
-  if (busy.value || !activeAccount.value) return;
+  if (busy.value || storageBusy.value || !activeAccount.value) return;
   const mode = quickPlay ? "Quick Play" : "Play";
   log(
     "INFO",
@@ -682,6 +746,7 @@ export const launcher = {
   state,
   activeAccount,
   busy,
+  storageBusy,
   loginLogs,
   loginStatus,
   login,
@@ -690,6 +755,8 @@ export const launcher = {
   setActiveModpack,
   saveSettings,
   resetSettings,
+  inspectStorageLocation,
+  migrateStorage,
   play,
   cancel,
   stop,

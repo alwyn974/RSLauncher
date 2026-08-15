@@ -44,10 +44,12 @@ struct IgnoreList {
 
 impl IgnoreList {
     fn load(game_dir: &Path) -> Self {
-        let paths = [
-            AppState::data_dir().join(IGNORELIST_FILE),
-            game_dir.join(IGNORELIST_FILE),
-        ];
+        let mut paths = vec![crate::storage::root_dir().join(IGNORELIST_FILE)];
+        let legacy_global = AppState::data_dir().join(IGNORELIST_FILE);
+        if !paths.contains(&legacy_global) {
+            paths.push(legacy_global);
+        }
+        paths.push(game_dir.join(IGNORELIST_FILE));
         let mut patterns = Vec::new();
 
         for path in paths {

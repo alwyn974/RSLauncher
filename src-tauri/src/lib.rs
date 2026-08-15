@@ -14,6 +14,7 @@ mod optional_content;
 mod servers;
 mod settings;
 mod state;
+mod storage;
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -95,7 +96,7 @@ fn install_window_state_autosave(app: &tauri::App) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    AppState::init(config::LAUNCHER_NAME).expect("failed to init Lighty AppState");
+    storage::init().expect("failed to initialize launcher storage");
     modpack_profile::init();
 
     // After install / NeoForge processors, before JVM spawn: reconcile overrides
@@ -177,6 +178,9 @@ pub fn run() {
             commands::settings::get_memory_info,
             commands::settings::open_instance_folder,
             commands::settings::open_launcher_folder,
+            storage::get_storage_info,
+            storage::inspect_storage_location,
+            storage::migrate_storage,
             commands::launch::get_instance_status,
             commands::launch::play,
             commands::launch::cancel,

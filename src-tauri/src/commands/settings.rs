@@ -108,5 +108,5 @@ pub async fn open_instance_folder() -> Result<(), AppError> {
 /// Open the RSLauncher data directory (parent of all instances).
 #[tauri::command]
 pub async fn open_launcher_folder() -> Result<(), AppError> {
-    open_dir(AppState::data_dir())
+    open_dir(crate::storage::root_dir())
 }

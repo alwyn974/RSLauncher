@@ -19,7 +19,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -110,10 +110,18 @@ async function applyOne(crate) {
   const tmpPatch = join(mkdtempSync(join(tmpdir(), "rslauncher-patch-")), `${crate}.patch`);
   writeFileSync(tmpPatch, patchLf);
   try {
+    const workspaceRoot = dirname(ROOT);
+    const relativeDest = relative(workspaceRoot, dest).replaceAll("\\", "/");
     execFileSync(
       "git",
-      ["apply", "-p1", "--whitespace=nowarn", tmpPatch],
-      { cwd: dest, stdio: "inherit" },
+      [
+        "apply",
+        "-p1",
+        "--whitespace=nowarn",
+        `--directory=${relativeDest}`,
+        tmpPatch,
+      ],
+      { cwd: workspaceRoot, stdio: "inherit" },
     );
   } finally {
     rmSync(dirname(tmpPatch), { recursive: true, force: true });
@@ -123,6 +131,7 @@ async function applyOne(crate) {
 }
 
 mkdirSync(OUT, { recursive: true });
+await applyOne("lighty-core");
 await applyOne("lighty-modsloader");
 await applyOne("lighty-version");
 await applyOne("lighty-launch");

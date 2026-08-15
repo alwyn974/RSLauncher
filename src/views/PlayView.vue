@@ -15,7 +15,9 @@ import SignInStatus from "../components/SignInStatus.vue";
 const modpack = computed(() => launcher.state.catalog.modpack);
 const stage = computed(() => launcher.state.progress.stage);
 const running = computed(() => stage.value === "running");
-const disabled = computed(() => launcher.busy.value || running.value);
+const disabled = computed(
+  () => launcher.busy.value || launcher.storageBusy.value || running.value,
+);
 
 const statusLabel = computed(() => {
   if (running.value) return "STOP";
@@ -130,6 +132,21 @@ function onQuickPlay() {
         >
           Quick Play → {{ launcher.state.settings.serverAddress }}
         </p>
+        <div
+          v-if="!launcher.state.installed && launcher.state.storage && !statusLabel"
+          class="flex max-w-md items-center gap-2 text-xs text-mc-muted"
+        >
+          <span class="truncate font-mono" :title="launcher.state.storage.dataDir">
+            Install location: {{ launcher.state.storage.dataDir }}
+          </span>
+          <button
+            type="button"
+            class="shrink-0 text-mc-gold underline decoration-1 underline-offset-2 hover:text-white"
+            @click="launcher.setView('settings')"
+          >
+            Change
+          </button>
+        </div>
       </div>
     </main>
 

@@ -169,3 +169,34 @@ pub struct DeviceCodePayload {
 pub struct AuthStatusPayload {
     pub step: String,
 }
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageInfo {
+    pub root: String,
+    pub data_dir: String,
+    pub cache_dir: String,
+    pub java_dir: String,
+    pub custom: bool,
+    pub installed_bytes: u64,
+    pub free_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageLocationCheck {
+    pub root: String,
+    pub bytes_to_move: u64,
+    pub free_bytes: u64,
+    pub required_bytes: u64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageMigrationProgress {
+    pub stage: String,
+    pub detail: String,
+    pub bytes_copied: u64,
+    pub bytes_total: u64,
+    pub percent: u32,
+}
