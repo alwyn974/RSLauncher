@@ -54,6 +54,13 @@ pub async fn get_active_account() -> Result<Option<AccountDto>, AppError> {
     accounts::get_active_account()
 }
 
+/// Best-effort daily refresh. Invalid/revoked sessions are kept as saved
+/// accounts and exposed to the UI as requiring reconnection.
+#[tauri::command]
+pub async fn refresh_account_sessions() -> Result<(), AppError> {
+    accounts::refresh_sessions().await
+}
+
 #[tauri::command]
 pub async fn set_active_account(id: String) -> Result<(), AppError> {
     accounts::set_active_account(&id)

@@ -167,6 +167,7 @@ pub fn run() {
             commands::auth::remove_account,
             commands::auth::set_active_account,
             commands::auth::get_active_account,
+            commands::auth::refresh_account_sessions,
             commands::settings::get_settings,
             commands::settings::save_settings,
             commands::settings::get_catalog,

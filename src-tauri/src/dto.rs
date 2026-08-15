@@ -11,6 +11,14 @@ pub struct AccountDto {
     pub username: String,
     pub uuid: String,
     pub avatar_seed: u32,
+    pub needs_reauth: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReauthRequiredPayload {
+    pub uuid: String,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

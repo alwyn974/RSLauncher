@@ -96,6 +96,12 @@ import SignInStatus from "../components/SignInStatus.vue";
           <span class="min-w-0 flex-1 truncate text-sm text-mc-text">
             {{ account.username }}
           </span>
+          <span
+            v-if="account.needsReauth"
+            class="font-pixel text-[9px] text-mc-gold"
+          >
+            Reconnect
+          </span>
           <button
             type="button"
             class="cursor-pointer p-1 text-mc-faint opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:text-mc-red"

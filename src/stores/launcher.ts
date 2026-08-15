@@ -27,6 +27,7 @@ export interface Account {
   username: string;
   uuid: string;
   avatarSeed: number;
+  needsReauth: boolean;
 }
 
 export interface Settings {
@@ -359,7 +360,28 @@ function levelFromPlugin(level: LogLevel): LogLine["level"] {
 
 function syncActive(accounts: Account[], active: Account | null) {
   state.accounts = accounts;
-  state.activeAccountId = active?.id ?? accounts[0]?.id ?? null;
+  state.activeAccountId =
+    active?.id ?? accounts.find((account) => !account.needsReauth)?.id ?? null;
+
+  if (!state.activeAccountId && accounts.some((account) => account.needsReauth)) {
+    state.loginError ??=
+      "Your saved Microsoft account needs to reconnect. You do not need to remove it.";
+  }
+}
+
+async function refreshAccountSessions() {
+  try {
+    await invoke("refresh_account_sessions");
+    const [accounts, active] = await Promise.all([
+      invoke<Account[]>("list_accounts"),
+      invoke<Account | null>("get_active_account"),
+    ]);
+    syncActive(accounts, active);
+  } catch (e) {
+    // A network outage must not sign the player out. The backend only marks
+    // definitely invalid/revoked refresh tokens as requiring reconnection.
+    log("WARN", "auth", `Background session refresh failed: ${errorMessage(e)}`);
+  }
 }
 
 export async function initLauncher() {
@@ -397,6 +419,13 @@ export async function initLauncher() {
       }),
       await listen<{ step: string }>("auth://status", (e) => {
         state.authStep = e.payload.step;
+      }),
+      await listen<{ uuid: string; message: string }>("auth://reauth_required", (e) => {
+        const account = state.accounts.find((item) => item.uuid === e.payload.uuid);
+        if (account) account.needsReauth = true;
+        if (state.activeAccountId === e.payload.uuid) state.activeAccountId = null;
+        state.loginError = e.payload.message;
+        log("WARN", "auth", e.payload.message);
       }),
       await listen<{ installed: boolean; modCount: number }>("instance://status", (e) => {
         state.installed = e.payload.installed;
@@ -447,6 +476,7 @@ export async function initLauncher() {
       log("ERROR", "launcher", `Failed to load state: ${errorMessage(e)}`);
     } finally {
       state.ready = true;
+      void refreshAccountSessions();
     }
   })();
   return initPromise;
@@ -491,6 +521,12 @@ async function removeAccount(id: string) {
 }
 
 async function setActiveAccount(id: string) {
+  const account = state.accounts.find((item) => item.id === id);
+  if (account?.needsReauth) {
+    state.activeAccountId = null;
+    await login();
+    return;
+  }
   try {
     await invoke("set_active_account", { id });
     state.activeAccountId = id;

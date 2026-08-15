@@ -76,6 +76,12 @@ function remove(id: string) {
         <span class="min-w-0 flex-1 truncate text-sm text-mc-text">
           {{ account.username }}
         </span>
+        <span
+          v-if="account.needsReauth"
+          class="font-pixel text-[8px] text-mc-gold"
+        >
+          Reconnect
+        </span>
         <PixelIcon
           v-if="account.id === launcher.state.activeAccountId"
           name="check"

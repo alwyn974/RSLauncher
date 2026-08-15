@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::accounts;
 use crate::config;
-use crate::dto::{InstanceStatus, Progress};
+use crate::dto::{InstanceStatus, Progress, ReauthRequiredPayload};
 use crate::error::AppError;
 use crate::modpack;
 use crate::servers;
@@ -38,7 +38,22 @@ fn emit_launch_error(app: &AppHandle, err: &AppError) {
     emit_log("ERROR", "launcher", format!("Launch failed: {message}"));
 }
 
-async fn resolve_profile() -> Result<UserProfile, AppError> {
+fn require_reauth(app: &AppHandle, uuid: &str, reason: &str) -> AppError {
+    if let Err(err) = accounts::mark_reauth_required(uuid) {
+        emit_log("WARN", "auth", format!("Could not mark account for reconnect: {err}"));
+    }
+    let message = format!("{reason}. Reconnect with Microsoft; you do not need to remove the account.");
+    let _ = app.emit(
+        "auth://reauth_required",
+        ReauthRequiredPayload {
+            uuid: uuid.to_string(),
+            message: message.clone(),
+        },
+    );
+    AppError::msg(message)
+}
+
+async fn resolve_profile(app: &AppHandle) -> Result<UserProfile, AppError> {
     let uuid = accounts::active_uuid()?
         .ok_or_else(|| AppError::msg("No active account - sign in first"))?;
 
@@ -47,27 +62,29 @@ async fn resolve_profile() -> Result<UserProfile, AppError> {
     if let Some(rt) = accounts::load_refresh_token(&uuid) {
         match auth.authenticate_with_refresh_token(&rt, None).await {
             Ok(profile) => {
-                if let AuthProvider::Microsoft {
-                    refresh_token: Some(new_rt),
-                    ..
-                } = &profile.provider
-                {
-                    let _ = accounts::save_refresh_token(&profile.uuid, new_rt);
-                }
+                accounts::upsert_from_profile(&profile)?;
                 return Ok(profile);
+            }
+            Err(AuthError::InvalidToken) => {
+                return Err(require_reauth(app, &uuid, "Microsoft session expired"));
             }
             Err(err) => {
                 emit_log(
                     "WARN",
                     "auth",
-                    format!("Silent refresh failed ({err}), re-login required"),
+                    format!("Silent refresh failed ({err})"),
                 );
+                return Err(AppError::msg(format!(
+                    "Could not refresh the Microsoft session: {err}. Try again in a moment."
+                )));
             }
         }
     }
 
-    Err(AppError::msg(
-        "Session expired - sign in with Microsoft again",
+    Err(require_reauth(
+        app,
+        &uuid,
+        "The saved Microsoft session is unavailable",
     ))
 }
 
@@ -156,7 +173,7 @@ async fn run_launch(
             6,
         ),
     );
-    let profile = resolve_profile().await?;
+    let profile = resolve_profile(&app).await?;
     let _ = app.emit(
         "launch://progress",
         Progress::detail(
