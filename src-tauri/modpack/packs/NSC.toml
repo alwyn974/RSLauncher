@@ -649,11 +649,6 @@ file_id = 8169164
 # Create : Misc & Things
 
 [[required_curseforge]]
-project_id = 508933
-file_id = 8389148
-# Distant Horizons: A Level of Detail mod
-
-[[required_curseforge]]
 project_id = 531761
 file_id = 8545422
 # Balm
