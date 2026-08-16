@@ -1622,7 +1622,7 @@ description = "Massively increase render distance without harming performance."
 default_enabled = false
 provider = "curseforge"
 project_id = 508933
-file_id = 8389141
+file_id = 8389148
 
 [[optional]]
 id = "free-cam"
