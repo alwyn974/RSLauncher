@@ -224,7 +224,7 @@ async function moveStorage() {
 <template>
   <div class="flex h-full flex-col p-3">
     <header class="flex items-center gap-3">
-      <PixelButton class="px-2 py-1.5" aria-label="Back" :disabled="storageLocked" @click="launcher.setView('play')">
+      <PixelButton class="px-2 py-1.5" aria-label="Back" @click="launcher.setView('play')">
         <PixelIcon name="back" :size="16" />
       </PixelButton>
       <div>
