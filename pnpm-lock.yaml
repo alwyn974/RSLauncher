@@ -55,8 +55,8 @@ importers:
         specifier: 2.11.4
         version: 2.11.4
       '@vitejs/plugin-vue':
-        specifier: 5.2.1
-        version: 5.2.1(vite@7.3.6(jiti@2.7.0)(lightningcss@1.33.0))(vue@3.5.40(typescript@5.9.3))
+        specifier: 5.2.4
+        version: 5.2.4(vite@7.3.6(jiti@2.7.0)(lightningcss@1.33.0))(vue@3.5.40(typescript@5.9.3))
       playwright:
         specifier: 1.62.1
         version: 1.62.1
@@ -602,8 +602,8 @@ packages:
   '@types/estree@1.0.9':
     resolution: {integrity: sha512-GhdPgy1el4/ImP05X05Uw4cw2/M93BCUmnEvWZNStlCzEKME4Fkk+YpoA5OiHNQmoS7Cafb8Xa3Pya8m1Qrzeg==}
 
-  '@vitejs/plugin-vue@5.2.1':
-    resolution: {integrity: sha512-cxh314tzaWwOLqVes2gnnCtvBDcM1UMdn+iFR+UjAn411dPT3tOmqrJjbMd7koZpMAmBM/GqeV4n9ge7JSiJJQ==}
+  '@vitejs/plugin-vue@5.2.4':
+    resolution: {integrity: sha512-7Yx/SXSOcQq5HiiV3orevHUFn+pmMB4cgbEkDYgnkUWb0WfeQ/wa2yFv6D5ICiCQOVpjA7vYDXrC7AGO8yjDHA==}
     engines: {node: ^18.0.0 || >=20.0.0}
     peerDependencies:
       vite: ^5.0.0 || ^6.0.0
@@ -1312,7 +1312,7 @@ snapshots:
 
   '@types/estree@1.0.9': {}
 
-  '@vitejs/plugin-vue@5.2.1(vite@7.3.6(jiti@2.7.0)(lightningcss@1.33.0))(vue@3.5.40(typescript@5.9.3))':
+  '@vitejs/plugin-vue@5.2.4(vite@7.3.6(jiti@2.7.0)(lightningcss@1.33.0))(vue@3.5.40(typescript@5.9.3))':
     dependencies:
       vite: 7.3.6(jiti@2.7.0)(lightningcss@1.33.0)
       vue: 3.5.40(typescript@5.9.3)
