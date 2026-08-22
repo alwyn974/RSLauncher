@@ -34,6 +34,11 @@
           "jsonpath": "$.package.version"
         },
         {
+          "path": "src-tauri/Cargo.lock",
+          "type": "toml",
+          "jsonpath": "$.package[?(@.name == 'RSLauncher')].version"
+        },
+        {
           "path": "src-tauri/tauri.conf.json",
           "type": "json",
           "jsonpath": "$.version"
