@@ -19,7 +19,7 @@ jobs:
     secrets:
       RELEASE_PLEASE_PRIVATE_KEY: ${{ secrets.RELEASE_PLEASE_PRIVATE_KEY }}
     with:
-      client-id: Iv23li7VT9BGzmuyc5BE
+      client-id: Iv23lizpKlycarJsIMmU
 
   gitflow-release:
     name: GitFlow Release
@@ -33,4 +33,4 @@ jobs:
     with:
       tag-name: ${{ needs.release-please.outputs.tag_name }}
       version: ${{ needs.release-please.outputs.version }}
-      client-id: Iv23li7VT9BGzmuyc5BE
+      client-id: Iv23lizpKlycarJsIMmU
