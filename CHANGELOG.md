@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/alwyn974/RSLauncher/compare/v0.5.0...v0.5.1) (2026-08-22)
+
+
+### 🐛 Bug Fixes
+
+* **ci:** Update Cargo lock during releases ([ae5ab6c](https://github.com/alwyn974/RSLauncher/commit/ae5ab6cb113a14d003cfce61761b2fc4d650a6b0))
+
 ## [0.5.0](https://github.com/alwyn974/RSLauncher/compare/v0.4.0...v0.5.0) (2026-08-22)
 
 
