@@ -13,7 +13,7 @@
     "tauri:dev": "pnpm patches:apply && tauri dev",
     "tauri:build": "pnpm patches:apply && tauri build"
   },
-  "packageManager": "pnpm@11.18.0",
+  "packageManager": "pnpm@11.22.0",
   "dependencies": {
     "@tailwindcss/vite": "4.3.3",
     "@tauri-apps/api": "2.11.1",
