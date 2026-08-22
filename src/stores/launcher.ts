@@ -613,7 +613,7 @@ async function setActiveModpack(id: string) {
   }
 }
 
-async function saveSettings(next: Settings) {
+async function saveSettings(next: Settings): Promise<boolean> {
   try {
     const saved = await invoke<Settings>("save_settings", { settings: next });
     state.settings = {
@@ -625,8 +625,10 @@ async function saveSettings(next: Settings) {
     state.catalog = await invoke<Catalog>("get_catalog");
     await refreshInstallStatus();
     log("INFO", "launcher", "Settings saved");
+    return true;
   } catch (e) {
     log("ERROR", "launcher", String(e));
+    return false;
   }
 }
 

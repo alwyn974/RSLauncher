@@ -55,15 +55,15 @@ function materializeToggles(): Pick<Settings, "enabledOptionalMods" | "enabledSh
   };
 }
 
-const initialSettings: Settings = {
+const savedSettings = reactive<Settings>({
   ...launcher.state.settings,
   ...materializeToggles(),
-};
+});
 
 const draft = reactive<Settings>({
-  ...initialSettings,
-  enabledOptionalMods: { ...initialSettings.enabledOptionalMods },
-  enabledShaderVariants: { ...initialSettings.enabledShaderVariants },
+  ...savedSettings,
+  enabledOptionalMods: { ...savedSettings.enabledOptionalMods },
+  enabledShaderVariants: { ...savedSettings.enabledShaderVariants },
 });
 
 function recordsEqual(
@@ -76,20 +76,20 @@ function recordsEqual(
 
 const hasUnsavedChanges = computed(
   () =>
-    draft.ramGb !== initialSettings.ramGb ||
-    draft.width !== initialSettings.width ||
-    draft.height !== initialSettings.height ||
-    draft.fullscreen !== initialSettings.fullscreen ||
-    draft.jvmArgs !== initialSettings.jvmArgs ||
-    draft.serverName !== initialSettings.serverName ||
-    draft.serverAddress !== initialSettings.serverAddress ||
+    draft.ramGb !== savedSettings.ramGb ||
+    draft.width !== savedSettings.width ||
+    draft.height !== savedSettings.height ||
+    draft.fullscreen !== savedSettings.fullscreen ||
+    draft.jvmArgs !== savedSettings.jvmArgs ||
+    draft.serverName !== savedSettings.serverName ||
+    draft.serverAddress !== savedSettings.serverAddress ||
     !recordsEqual(
       draft.enabledOptionalMods,
-      initialSettings.enabledOptionalMods,
+      savedSettings.enabledOptionalMods,
     ) ||
     !recordsEqual(
       draft.enabledShaderVariants,
-      initialSettings.enabledShaderVariants,
+      savedSettings.enabledShaderVariants,
     ),
 );
 
@@ -174,7 +174,7 @@ function clampDraft() {
 
 async function save() {
   clampDraft();
-  await launcher.saveSettings({
+  const didSave = await launcher.saveSettings({
     ramGb: draft.ramGb,
     width: draft.width,
     height: draft.height,
@@ -185,6 +185,9 @@ async function save() {
     enabledOptionalMods: { ...draft.enabledOptionalMods },
     enabledShaderVariants: { ...draft.enabledShaderVariants },
   });
+  if (!didSave) return;
+
+  Object.assign(savedSettings, launcher.state.settings, materializeToggles());
   launcher.setView("play");
 }
 
