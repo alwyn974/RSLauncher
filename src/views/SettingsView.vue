@@ -4,7 +4,7 @@
  */
 import { computed, reactive, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { confirm as confirmDialog, open } from "@tauri-apps/plugin-dialog";
 import { relaunch } from "@tauri-apps/plugin-process";
 import {
   launcher,
@@ -55,10 +55,61 @@ function materializeToggles(): Pick<Settings, "enabledOptionalMods" | "enabledSh
   };
 }
 
-const draft = reactive<Settings>({
+const initialSettings: Settings = {
   ...launcher.state.settings,
   ...materializeToggles(),
+};
+
+const draft = reactive<Settings>({
+  ...initialSettings,
+  enabledOptionalMods: { ...initialSettings.enabledOptionalMods },
+  enabledShaderVariants: { ...initialSettings.enabledShaderVariants },
 });
+
+function recordsEqual(
+  left: Record<string, boolean>,
+  right: Record<string, boolean>,
+): boolean {
+  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
+  return [...keys].every((key) => left[key] === right[key]);
+}
+
+const hasUnsavedChanges = computed(
+  () =>
+    draft.ramGb !== initialSettings.ramGb ||
+    draft.width !== initialSettings.width ||
+    draft.height !== initialSettings.height ||
+    draft.fullscreen !== initialSettings.fullscreen ||
+    draft.jvmArgs !== initialSettings.jvmArgs ||
+    draft.serverName !== initialSettings.serverName ||
+    draft.serverAddress !== initialSettings.serverAddress ||
+    !recordsEqual(
+      draft.enabledOptionalMods,
+      initialSettings.enabledOptionalMods,
+    ) ||
+    !recordsEqual(
+      draft.enabledShaderVariants,
+      initialSettings.enabledShaderVariants,
+    ),
+);
+
+async function goBack() {
+  if (
+    hasUnsavedChanges.value &&
+    !(await confirmDialog(
+      "Your settings have changed. Discard the unsaved changes?",
+      {
+        title: "Unsaved settings",
+        kind: "warning",
+        okLabel: "Discard changes",
+        cancelLabel: "Keep editing",
+      },
+    ))
+  ) {
+    return;
+  }
+  launcher.setView("play");
+}
 
 const ramMin = computed(() => launcher.state.memory.minGb);
 const ramMax = computed(() => Math.max(launcher.state.memory.totalGb, ramMin.value));
@@ -224,7 +275,7 @@ async function moveStorage() {
 <template>
   <div class="flex h-full flex-col p-3">
     <header class="flex items-center gap-3">
-      <PixelButton class="px-2 py-1.5" aria-label="Back" :disabled="storageLocked" @click="launcher.setView('play')">
+      <PixelButton class="px-2 py-1.5" aria-label="Back" @click="goBack">
         <PixelIcon name="back" :size="16" />
       </PixelButton>
       <div>

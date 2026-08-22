@@ -1,7 +1,7 @@
 {
   "name": "launcher",
   "private": true,
-  "version": "0.3.2",
+  "version": "0.4.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -28,14 +28,14 @@
     "@tauri-apps/plugin-window-state": "2.4.1",
     "qrcode.vue": "3.10.0",
     "tailwindcss": "4.3.3",
-    "vue": "3.5.40"
+    "vue": "3.5.41"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.11.4",
-    "@vitejs/plugin-vue": "5.2.1",
+    "@vitejs/plugin-vue": "5.2.4",
     "playwright": "1.62.1",
     "typescript": "5.9.3",
     "vite": "7.3.6",
-    "vue-tsc": "3.3.9"
+    "vue-tsc": "3.3.10"
   }
 }
