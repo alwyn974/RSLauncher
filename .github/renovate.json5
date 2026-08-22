@@ -8,7 +8,7 @@
   ],
   useBaseBranchConfig: 'merge',
   baseBranchPatterns: [
-    '$default',
+    'dev',
   ],
   major: {
     dependencyDashboardApproval: true,
@@ -20,12 +20,5 @@
   labels: [
     '📌 dependencies',
   ],
-  semanticCommits: 'enabled',
-  packageRules: [
-    {
-      matchUpdateTypes: ["minor", "patch"],
-      matchCurrentVersion: "!/^0/",
-      automerge: true
-    }
-  ]
+  semanticCommits: 'enabled'
 }

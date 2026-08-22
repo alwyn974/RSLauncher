@@ -1,0 +1,36 @@
+name: Release Please
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    name: Release Please
+    uses: NeoTamia/actions/.github/workflows/release-please.yml@19c096d7414b3b1756eea45e5aa5c7a3eaed3455 # main
+    permissions:
+      contents: write
+      pull-requests: write
+    secrets:
+      RELEASE_PLEASE_PRIVATE_KEY: ${{ secrets.RELEASE_PLEASE_PRIVATE_KEY }}
+    with:
+      client-id: Iv23lizpKlycarJsIMmU
+
+  gitflow-release:
+    name: GitFlow Release
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    uses: NeoTamia/actions/.github/workflows/gitflow-release.yml@19c096d7414b3b1756eea45e5aa5c7a3eaed3455 # main
+    permissions:
+      contents: write
+    secrets:
+      RELEASE_PLEASE_PRIVATE_KEY: ${{ secrets.RELEASE_PLEASE_PRIVATE_KEY }}
+    with:
+      tag-name: ${{ needs.release-please.outputs.tag_name }}
+      version: ${{ needs.release-please.outputs.version }}
+      client-id: Iv23lizpKlycarJsIMmU
