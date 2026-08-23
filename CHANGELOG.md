@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.1](https://github.com/alwyn974/RSLauncher/compare/v0.5.0...v0.5.1) (2026-08-23)
+
+
+### 🐛 Bug Fixes
+
+* **ci:** Update Cargo lock during releases ([ae5ab6c](https://github.com/alwyn974/RSLauncher/commit/ae5ab6cb113a14d003cfce61761b2fc4d650a6b0))
+* **settings:** Clear dirty state after saving ([53d5612](https://github.com/alwyn974/RSLauncher/commit/53d5612925af0bf388ffe5a91fb45e549cf197ee))
+
 ## [0.5.0](https://github.com/alwyn974/RSLauncher/compare/v0.4.0...v0.5.0) (2026-08-22)
 
 
