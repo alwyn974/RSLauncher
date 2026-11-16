@@ -1,7 +1,6 @@
 {
   $schema: 'https://docs.renovatebot.com/renovate-schema.json',
   extends: [
-    // https://docs.renovatebot.com/presets-config/#configbest-practices
     'config:best-practices',
     ':semanticCommitTypeAll(build)',
     ':docker',
@@ -14,11 +13,13 @@
     dependencyDashboardApproval: true,
   },
   dependencyDashboardApproval: false,
-  dependencyDashboardLabels: [
-    '📌 dependencies',
-  ],
+  dependencyDashboard: {
+    labels: [
+      '📌 dependencies',
+    ],
+  },
   labels: [
     '📌 dependencies',
   ],
-  semanticCommits: 'enabled'
+  semanticCommits: 'enabled',
 }
